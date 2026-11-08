@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MENTION_PATTERN, mentionToken } from "@/lib/api";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
+import { isImeEnter } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 
 type MentionMap = Map<string, string>;
@@ -95,7 +96,7 @@ export function MentionTextarea({
       event.preventDefault();
       const delta = event.key === "ArrowDown" ? 1 : -1;
       setIndex((i) => (i + delta + candidates.length) % candidates.length);
-    } else if ((event.key === "Enter" || event.key === "Tab") && !event.nativeEvent.isComposing) {
+    } else if ((event.key === "Enter" || event.key === "Tab") && !isImeEnter(event.nativeEvent)) {
       event.preventDefault();
       pick(candidates[index]);
     } else if (event.key === "Escape") {

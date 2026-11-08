@@ -73,6 +73,28 @@ describe("chat", () => {
     ).rejects.toThrow(/NOT_FOUND/);
   });
 
+  test("the chat list previews the latest message and shows team members' photos", async () => {
+    const t = setup();
+    const admin = await bootstrapAdmin(t);
+    const alice = await addMember(t, admin.as, "alice@ucsb.edu", "events");
+    const bob = await addMember(t, admin.as, "bob@ucsb.edu", "events");
+    const eventsId = await departmentChannelId(alice.as, "Events");
+
+    let events = (await bob.as.query(api.channels.listMine, {})).departments[0];
+    expect(events.preview).toBeNull();
+    expect(events.faces?.map((f) => f.email).sort()).toEqual(["alice@ucsb.edu", "bob@ucsb.edu"]);
+
+    await alice.as.mutation(api.messages.send, { channelId: eventsId, body: `hi <@${bob.userId}>` });
+    events = (await bob.as.query(api.channels.listMine, {})).departments[0];
+    expect(events.preview).toMatchObject({ authorId: alice.userId, state: "normal", body: `hi <@${bob.userId}>` });
+    expect(events.preview?.people.map((p) => p.email).sort()).toEqual(["alice@ucsb.edu", "bob@ucsb.edu"]);
+
+    const [message] = (await alice.as.query(api.messages.list, { channelId: eventsId, paginationOpts: page })).page;
+    await alice.as.mutation(api.messages.recall, { messageId: message._id });
+    events = (await bob.as.query(api.channels.listMine, {})).departments[0];
+    expect(events.preview).toMatchObject({ authorId: alice.userId, state: "recalled", body: "" });
+  });
+
   test("rejects empty and oversized messages", async () => {
     const t = setup();
     const admin = await bootstrapAdmin(t);

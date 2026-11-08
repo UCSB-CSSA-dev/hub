@@ -14,7 +14,16 @@ import {
   Undo2Icon,
 } from "lucide-react";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { useViewer } from "@/components/auth/account-state";
 import { PersonAvatar } from "@/components/people/person-avatar";
@@ -36,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, LIMITS, REACTIONS, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
@@ -208,18 +218,24 @@ function MessageRow({ message, grouped, highlighted }: { message: Message; group
   const locale = useLocale() as Locale;
   const format = useFormatter();
   const { selecting, selected, toggleSelected } = useChat();
+  const [sheetOpenedAt, setSheetOpenedAt] = useState<number | null>(null);
   const author = personById(message.people, message.authorId);
   const time = format.dateTime(message._creationTime, { hour: "numeric", minute: "2-digit" });
   const card = message.kind === "task" || message.kind === "doc";
   const selectable = message.state === "normal" && !card;
   const isSelected = selected.has(message._id);
+  const hasActions = !selecting && message.state === "normal";
+  const longPress = useLongPress(() => setSheetOpenedAt(Date.now()));
 
   return (
     <div
       data-message-id={message._id}
       onClick={selecting && selectable ? () => toggleSelected(message) : undefined}
+      {...(hasActions ? longPress : {})}
       className={cn(
         "group relative flex gap-3 rounded-md py-0.5 pr-2 hover:bg-surface-hover",
+        hasActions && "[-webkit-touch-callout:none] pointer-coarse:select-none",
+        sheetOpenedAt !== null && "bg-surface-hover",
         !grouped && "mt-2",
         message.announcement &&
           message.state === "normal" &&
@@ -258,9 +274,56 @@ function MessageRow({ message, grouped, highlighted }: { message: Message; group
         )}
         <MessageContent message={message} />
       </div>
-      {!selecting && message.state === "normal" ? <MessageActions message={message} /> : null}
+      {hasActions ? (
+        <MessageActions message={message} sheetOpenedAt={sheetOpenedAt} onCloseSheet={() => setSheetOpenedAt(null)} />
+      ) : null}
     </div>
   );
+}
+
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLOP_PX = 10;
+
+/** Touch and hold: phones can't hover, so this is how they reach a message's actions. */
+function useLongPress(onLongPress: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const origin = useRef<{ x: number; y: number } | null>(null);
+  const fired = useRef(false);
+  const cancel = () => {
+    clearTimeout(timer.current);
+    origin.current = null;
+  };
+  return {
+    onPointerDown(event: PointerEvent<HTMLElement>) {
+      fired.current = false;
+      // The action sheet is portaled, but its events still bubble through the row in React.
+      if (event.pointerType !== "touch" || !event.currentTarget.contains(event.target as Node)) return;
+      origin.current = { x: event.clientX, y: event.clientY };
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        origin.current = null;
+        fired.current = true;
+        navigator.vibrate?.(10);
+        onLongPress();
+      }, LONG_PRESS_MS);
+    },
+    onPointerMove(event: PointerEvent<HTMLElement>) {
+      const start = origin.current;
+      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_SLOP_PX) cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    onContextMenu(event: MouseEvent<HTMLElement>) {
+      if (fired.current || origin.current) event.preventDefault();
+    },
+    // The finger lifting after a long press must not also open a link or image under it.
+    onClickCapture(event: MouseEvent<HTMLElement>) {
+      if (!fired.current) return;
+      fired.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+  };
 }
 
 function MessageContent({ message }: { message: Message }) {
@@ -396,17 +459,28 @@ function ReactionPicker({ message }: { message: Message }) {
   );
 }
 
-function MessageActions({ message }: { message: Message }) {
+function MessageActions({
+  message,
+  sheetOpenedAt,
+  onCloseSheet,
+}: {
+  message: Message;
+  /** When the long-press sheet opened, or null while it is closed. */
+  sheetOpenedAt: number | null;
+  onCloseSheet: () => void;
+}) {
   const t = useTranslations("chat");
   const viewer = useViewer();
   const { channel, setReplyTo, setEditing, startSelecting, forward } = useChat();
   const recall = useMutation(api.messages.recall);
   const remove = useMutation(api.messages.remove);
+  const toggleReaction = useMutation(api.messages.toggleReaction);
   const showError = useErrorToast();
   const preview = usePlainPreview();
-  const [now, setNow] = useState(0);
+  const [menuOpenedAt, setMenuOpenedAt] = useState(0);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
+  const now = sheetOpenedAt ?? menuOpenedAt;
   const isMember = channel.access.via === "member";
   const own = message.authorId === viewer._id;
   const canReact = isMember && channel.access.canInteract;
@@ -421,60 +495,128 @@ function MessageActions({ message }: { message: Message }) {
     toast.success(t("copied"));
   };
 
+  const sheetAction = (action: () => void) => () => {
+    onCloseSheet();
+    action();
+  };
+
   return (
-    <div className="absolute -top-3 right-2 hidden items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 shadow-sm group-hover:flex has-[[data-state=open]]:flex">
-      {canReact ? <ReactionPicker message={message} /> : null}
-      {canReply ? (
-        <Button size="icon-xs" variant="ghost" aria-label={t("reply")} onClick={() => setReplyTo(message)}>
-          <CornerUpLeftIcon />
-        </Button>
-      ) : null}
-      <DropdownMenu onOpenChange={(open) => open && setNow(Date.now())}>
-        <DropdownMenuTrigger asChild>
-          <Button size="icon-xs" variant="ghost" aria-label={t("more")}>
-            <MoreHorizontalIcon />
+    <>
+      <div className="absolute -top-3 right-2 hidden items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 shadow-sm group-hover:flex has-[[data-state=open]]:flex">
+        {canReact ? <ReactionPicker message={message} /> : null}
+        {canReply ? (
+          <Button size="icon-xs" variant="ghost" aria-label={t("reply")} onClick={() => setReplyTo(message)}>
+            <CornerUpLeftIcon />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {canEdit ? (
-            <DropdownMenuItem onSelect={() => setEditing(message)}>
-              <PencilIcon />
-              {t("edit")}
-            </DropdownMenuItem>
-          ) : null}
-          {canRecall ? (
-            <DropdownMenuItem onSelect={() => recall({ messageId: message._id }).catch(showError)}>
-              <Undo2Icon />
-              {t("recall")}
-            </DropdownMenuItem>
-          ) : null}
-          {isMember && !card ? (
-            <DropdownMenuItem onSelect={() => forward([message._id])}>
-              <ForwardIcon />
-              {t("forward")}
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onSelect={() => void copy()}>
-            <CopyIcon />
-            {t("copy")}
-          </DropdownMenuItem>
-          {!card ? (
-            <DropdownMenuItem onSelect={() => startSelecting(message)}>
-              <ListChecksIcon />
-              {t("select")}
-            </DropdownMenuItem>
-          ) : null}
-          {channel.access.canModerate ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmRemove(true)}>
-                <ShieldXIcon />
-                {t("moderateRemove")}
+        ) : null}
+        <DropdownMenu onOpenChange={(open) => open && setMenuOpenedAt(Date.now())}>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon-xs" variant="ghost" aria-label={t("more")}>
+              <MoreHorizontalIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canEdit ? (
+              <DropdownMenuItem onSelect={() => setEditing(message)}>
+                <PencilIcon />
+                {t("edit")}
               </DropdownMenuItem>
-            </>
+            ) : null}
+            {canRecall ? (
+              <DropdownMenuItem onSelect={() => recall({ messageId: message._id }).catch(showError)}>
+                <Undo2Icon />
+                {t("recall")}
+              </DropdownMenuItem>
+            ) : null}
+            {isMember && !card ? (
+              <DropdownMenuItem onSelect={() => forward([message._id])}>
+                <ForwardIcon />
+                {t("forward")}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem onSelect={() => void copy()}>
+              <CopyIcon />
+              {t("copy")}
+            </DropdownMenuItem>
+            {!card ? (
+              <DropdownMenuItem onSelect={() => startSelecting(message)}>
+                <ListChecksIcon />
+                {t("select")}
+              </DropdownMenuItem>
+            ) : null}
+            {channel.access.canModerate ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => setConfirmRemove(true)}>
+                  <ShieldXIcon />
+                  {t("moderateRemove")}
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <Sheet open={sheetOpenedAt !== null} onOpenChange={(open) => !open && onCloseSheet()}>
+        <SheetContent side="bottom" showCloseButton={false} aria-describedby={undefined} className="gap-0 rounded-t-xl pt-2">
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
+          <SheetTitle className="sr-only">{t("messageActions")}</SheetTitle>
+          {canReact ? (
+            <div className="flex justify-around border-b border-border px-3 pb-3">
+              {REACTIONS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={cn(
+                    "flex size-11 items-center justify-center rounded-full text-2xl leading-none active:bg-accent",
+                    message.reactions.some((r) => r.emoji === emoji && r.mine) && "bg-primary/15",
+                  )}
+                  onClick={sheetAction(() => void toggleReaction({ messageId: message._id, emoji }).catch(showError))}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
           ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <div className="flex flex-col py-1">
+            {canReply ? (
+              <SheetAction icon={<CornerUpLeftIcon />} onClick={sheetAction(() => setReplyTo(message))}>
+                {t("reply")}
+              </SheetAction>
+            ) : null}
+            {canEdit ? (
+              <SheetAction icon={<PencilIcon />} onClick={sheetAction(() => setEditing(message))}>
+                {t("edit")}
+              </SheetAction>
+            ) : null}
+            {canRecall ? (
+              <SheetAction
+                icon={<Undo2Icon />}
+                onClick={sheetAction(() => void recall({ messageId: message._id }).catch(showError))}
+              >
+                {t("recall")}
+              </SheetAction>
+            ) : null}
+            {isMember && !card ? (
+              <SheetAction icon={<ForwardIcon />} onClick={sheetAction(() => forward([message._id]))}>
+                {t("forward")}
+              </SheetAction>
+            ) : null}
+            <SheetAction icon={<CopyIcon />} onClick={sheetAction(() => void copy())}>
+              {t("copy")}
+            </SheetAction>
+            {!card ? (
+              <SheetAction icon={<ListChecksIcon />} onClick={sheetAction(() => startSelecting(message))}>
+                {t("select")}
+              </SheetAction>
+            ) : null}
+            {channel.access.canModerate ? (
+              <SheetAction icon={<ShieldXIcon />} destructive onClick={sheetAction(() => setConfirmRemove(true))}>
+                {t("moderateRemove")}
+              </SheetAction>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
       <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <DialogContent>
           <DialogHeader>
@@ -497,7 +639,33 @@ function MessageActions({ message }: { message: Message }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  );
+}
+
+function SheetAction({
+  icon,
+  destructive,
+  onClick,
+  children,
+}: {
+  icon: ReactNode;
+  destructive?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 px-5 py-3 text-left text-base active:bg-accent [&_svg]:size-5",
+        destructive ? "text-destructive" : "[&_svg]:text-muted-foreground",
+      )}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 

@@ -31,7 +31,6 @@
     "formerViceChair": "Former Vice President"
   },
   "nav": {
-    "appearance": "Appearance",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode",
     "chat": "Chat",
@@ -296,7 +295,24 @@
     "saveToFiles": "Save to Files",
     "documents": "Documents",
     "newDocument": "New shared document",
-    "allDocuments": "Chat documents"
+    "allDocuments": "Chat documents",
+    "messageActions": "Message actions",
+    "list": {
+      "unread": "{count} unread",
+      "announcementTag": "[Announcement ×{count}]",
+      "mutedCount": "[{count}]",
+      "muted": "Muted",
+      "you": "You",
+      "withSender": "{name}: {text}",
+      "recalled": "{name} recalled a message",
+      "removed": "A message was removed",
+      "forward": "[Chat history]",
+      "task": "[Task]",
+      "doc": "[Doc]",
+      "attachment": "[Attachment]",
+      "announcement": "[Announcement]",
+      "yesterday": "Yesterday"
+    }
   },
   "roster": {
     "title": "Roster",
@@ -415,11 +431,8 @@
     "language": "Interface language",
     "push": "Push notifications",
     "pushHint": "Get a system notification on this device for new chat messages (except muted chats), mentions, replies, announcements and review results, even when CSSA Hub isn't open. Turn it on separately on each device.",
-    "pushOn": "On",
-    "pushEnable": "Turn on notifications",
     "pushEnabled": "Turned on. A test notification is on its way",
     "pushEnableFailed": "Couldn't turn on notifications. Please try again later",
-    "pushDisable": "Turn off on this device",
     "pushDenied": "Your browser is blocking notifications from this site. Allow them in the browser's site settings, then reload the page.",
     "pushUnsupported": "This browser doesn't support push notifications.",
     "pushIosInstall": "On iPhone, add CSSA Hub to your Home Screen and open it from there before turning on notifications.",
@@ -472,7 +485,36 @@
     "save": "Save",
     "publicPageLink": "See the About us page",
     "showEmailPublicly": "Show my email on the public About us page",
-    "showEmailPubliclyHint": "Hidden by default. When on, anyone can see {email}."
+    "showEmailPubliclyHint": "Hidden by default. When on, anyone can see {email}.",
+    "deviceFilesTitle": "Files on this device",
+    "deviceFilesBody": "Images and files you open in the app are kept on this device, so opening them again doesn't download them. They don't expire; signing out clears them.",
+    "deviceFilesSummary": "{count, plural, one {# file} other {# files}}, {size} in total",
+    "deviceFilesOlderThan": "Delete files kept longer than",
+    "deviceFilesDays": "{days} days",
+    "deviceFilesDeleteOlder": "Delete",
+    "deviceFilesDeleteAll": "Delete all",
+    "deviceFilesDeleteAllBody": "Every file kept on this device will be deleted. They'll download again the next time you open them.",
+    "deviceFilesKeptOn": "kept {date}",
+    "deviceFilesDelete": "Delete {name}",
+    "deviceFilesRemoved": "{count, plural, one {Deleted # file} other {Deleted # files}}",
+    "tabs": {
+      "personal": "Personal",
+      "notifications": "Notifications",
+      "general": "General"
+    },
+    "display": "Display",
+    "theme": "Appearance",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "fontSize": "Text size",
+    "fontSizeHint": "Applies to this device only.",
+    "fontSizes": {
+      "small": "Small",
+      "default": "Default",
+      "large": "Large",
+      "larger": "Larger"
+    },
+    "pushThisDevice": "Get notifications on this device"
   },
   "weekdays": {
     "0": "Sun",
@@ -543,6 +585,7 @@
     "submissionReceived": "{actor} submitted \"{title}\"",
     "submissionApproved": "{actor} approved your \"{title}\"",
     "submissionChanges": "{actor} requested changes on \"{title}\"",
+    "submissionCompleted": "{actor} marked your \"{title}\" as complete",
     "assignmentComment": "{actor} commented on \"{title}\"",
     "docMention": "{actor} mentioned you in \"{title}\"",
     "taskMention": "{actor} mentioned you in the {kind} \"{title}\""
@@ -906,7 +949,10 @@
     "driveNotConfigured": "\"{name}\" needs Google Drive, but the Apps Script isn't connected yet. Ask the Presidium.",
     "driveFailed": "\"{name}\" couldn't be uploaded to Google Drive. Try again later.",
     "openInDrive": "Open in Google Drive",
-    "inDrive": "Google Drive"
+    "inDrive": "Google Drive",
+    "keptOnDevice": "Kept on this device",
+    "previewFailed": "This file couldn't be opened.",
+    "openOriginal": "Open original"
   },
   "tasks": {
     "title": "Tasks",
@@ -1053,7 +1099,11 @@
     "changesToast": "Changes requested",
     "reviewHint": "You can still request changes after approving.",
     "descriptionTooLong": "The description is too long (max {max} characters; each @ mention counts too)",
-    "nobodyInChat": "This chat has no approved members yet, so nobody would get it. Add members first, or untick this and pick people."
+    "nobodyInChat": "This chat has no approved members yet, so nobody would get it. Add members first, or untick this and pick people.",
+    "markComplete": "Mark complete",
+    "markedCompleteToast": "Marked complete",
+    "markCompleteHint": "Counts as done without a submission. You can still request changes later.",
+    "completedWithoutSubmission": "Marked complete by a reviewer without a submission."
   },
   "docs": {
     "title": "Documents",

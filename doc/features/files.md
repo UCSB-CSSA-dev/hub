@@ -75,10 +75,22 @@ The Convex free plan has a hard cap of 1 GB of stored files, shared by Files, ta
 
 ## Previews
 
-- Images: inline preview and lightbox.
-- PDF: opens in a new tab (the browser's viewer).
-- Video and audio: native players.
-- Everything else: download only.
+Stored files (Files, chat attachments, task and submission files) open in a viewer dialog with a close button, never on a Convex page in a new tab (`components/files/file-viewer.tsx`):
+
+- Images: full size, fitted to the dialog.
+- PDF: rendered with pdf.js (`pdfjs-dist`), fitted to the width, pages drawn as they scroll into view, with pdf.js's text layer on top so text can be selected and copied where it appears.
+- Video and audio: native players. Plain text and JSON: shown as text (first 1 MB).
+- Everything else: an icon and a Download button.
+- Drive files keep Drive's own viewer in an iframe.
+
+### Kept on this device
+
+To save Convex bandwidth, a file's bytes are fetched once and kept in the browser's IndexedDB (`cssa-hub-files`, `lib/file-cache.ts`), keyed by the storage URL (stable per stored blob). `localStorage` holds only a few MB of text, so it can't hold files. Opening or downloading the file again reads it from the device.
+
+- Only Convex storage files, up to 100 MB each; Drive files and larger ones stream each time.
+- Nothing expires on its own. The app asks the browser for persistent storage so it isn't evicted under pressure (the browser may decline).
+- Settings → "本设备上的文件 / Files on this device" lists every kept file with its size and date, deletes one, deletes files kept longer than 30, 90, 180 or 360 days, or deletes everything.
+- Signing out clears it, so the next person on a shared device can't open them.
 
 ## Documents
 

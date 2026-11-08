@@ -21,7 +21,7 @@ import {
 } from "./lib/channels";
 import { LIMITS, RETENTION_OPTIONS } from "./lib/constants";
 import { appError } from "./lib/errors";
-import { isLiveUserContent, postSystemMessage } from "./lib/messages";
+import { isLiveUserContent, messageState, postSystemMessage, type MessageState } from "./lib/messages";
 import { toMessageViews } from "./lib/messageViews";
 import { requireApproved, type ViewerContext } from "./lib/permissions";
 import { getUserSummaries, toUserSummary, type UserSummary } from "./lib/users";
@@ -44,7 +44,60 @@ export type ChannelView = {
   muted: boolean;
   ended: boolean;
   archived: boolean;
+  /** Chat list only: the latest non-system message. */
+  preview?: ChannelPreview | null;
+  /** Chat list only: up to 9 member photos for department and group chats. */
+  faces?: UserSummary[];
 };
+
+export type ChannelPreview = {
+  authorId: Id<"users">;
+  kind: "user" | "forward" | "task" | "doc";
+  state: MessageState;
+  /** Empty unless the message is still there. */
+  body: string;
+  announcement: boolean;
+  at: number;
+  /** The author and anyone mentioned in `body`. */
+  people: UserSummary[];
+};
+
+const PREVIEW_BODY_CHARS = 200;
+const PREVIEW_SCAN = 20;
+const MAX_FACES = 9;
+
+async function channelPreview(ctx: QueryCtx, channel: Doc<"channels">): Promise<ChannelPreview | null> {
+  const recent = await ctx.db
+    .query("messages")
+    .withIndex("by_channel", (q) => q.eq("channelId", channel._id))
+    .order("desc")
+    .take(PREVIEW_SCAN);
+  const message = recent.find((m) => (m.kind ?? "user") !== "system");
+  if (!message) return null;
+  const state = messageState(message);
+  const body = state === "normal" ? message.body.slice(0, PREVIEW_BODY_CHARS) : "";
+  const people = await getUserSummaries(ctx, [message.authorId, ...(message.mentionUserIds ?? [])]);
+  return {
+    authorId: message.authorId,
+    kind: (message.kind ?? "user") as ChannelPreview["kind"],
+    state,
+    body,
+    announcement: message.announcement === true,
+    at: message._creationTime,
+    people: [...people.values()],
+  };
+}
+
+/** Adds what the chat list shows beyond the name: the latest message and, for team chats, member photos. */
+async function withListDetails(ctx: QueryCtx, channel: Doc<"channels">, view: ChannelView): Promise<ChannelView> {
+  view.preview = await channelPreview(ctx, channel);
+  if (channel.type === "department" || channel.type === "group") {
+    const ids = (await channelAudience(ctx, channel)).slice(0, MAX_FACES);
+    const people = await getUserSummaries(ctx, ids);
+    view.faces = ids.flatMap((id) => people.get(id) ?? []);
+  }
+  return view;
+}
 
 async function toChannelView(
   ctx: QueryCtx,
@@ -168,7 +221,8 @@ export const listMine = query({
       if (group) groups.push(group);
     }
 
-    const views = (list: Doc<"channels">[]) => Promise.all(list.map((c) => toChannelView(ctx, viewer, c)));
+    const views = (list: Doc<"channels">[]) =>
+      Promise.all(list.map(async (c) => withListDetails(ctx, c, await toChannelView(ctx, viewer, c))));
     return {
       org: await views(org),
       departments: await views(departmentChannels),

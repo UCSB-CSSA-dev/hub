@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { AppProviders } from "@/components/providers/app-providers";
+import { fontSizeScript } from "@/lib/font-size";
 import "./globals.css";
 
 // Restore before paint; keep the default when browser storage is unavailable.
@@ -22,7 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="zh-CN" className="dark h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full">
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: themeScript + fontSizeScript }} />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

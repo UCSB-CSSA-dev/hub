@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import {
   ArrowLeftIcon,
+  BellOffIcon,
   ChevronRightIcon,
   ClipboardListIcon,
   EyeIcon,
@@ -11,10 +12,12 @@ import {
   PlusIcon,
   UsersRoundIcon,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
+import logoMark from "@/assets/brand/logo-mark.webp";
 import { useViewer } from "@/components/auth/account-state";
 import { GroupFormDialog } from "@/components/groups/group-form-dialog";
 import { ProposalsDialog } from "@/components/groups/proposals-dialog";
@@ -28,6 +31,7 @@ import { api, LIMITS, type Id } from "@/lib/api";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
 import { cn } from "@/lib/utils";
+import { usePlainPreview } from "./markdown";
 import { NewDmDialog } from "./new-dm-dialog";
 import type { Channel, ChannelLists } from "./types";
 import { useChannelName } from "./use-channel-name";
@@ -213,57 +217,167 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
 function ChannelItem({ channel, active, href }: { channel: Channel; active: boolean; href: string }) {
   const t = useTranslations("chat");
   const name = useChannelName()(channel);
+  const previewText = usePreviewText();
+  const time = useListTime();
   const unread = channel.unread;
   const announcements = channel.unseenAnnouncements;
   const inactive = channel.ended || channel.archived;
   const cap = (count: number) => (count > LIMITS.unreadCountCap ? `${LIMITS.unreadCountCap}+` : count);
+  const preview = channel.preview ? previewText(channel, channel.preview) : null;
 
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        (announcements > 0 || (unread > 0 && !channel.muted)) && !active && "font-medium text-foreground",
+        "flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors",
+        active ? "bg-accent" : "hover:bg-accent/60",
         inactive && "opacity-60",
       )}
     >
-      <ChannelIcon channel={channel} />
-      <span className="min-w-0 flex-1 truncate">{name}</span>
-      {inactive ? <span className="text-[10px]">{channel.ended ? t("endedTag") : t("archivedTag")}</span> : null}
-      {active ? null : announcements > 0 ? (
-        <span
-          className="flex items-center gap-0.5 rounded-full bg-warning px-1.5 text-[11px] leading-5 font-semibold text-primary-foreground"
-          aria-label={t("unseenAnnouncements", { count: announcements })}
-        >
-          <MegaphoneIcon className="size-3" />
-          {cap(announcements)}
-        </span>
-      ) : unread > 0 ? (
-        channel.muted ? (
-          <span className="size-2 rounded-full bg-muted-foreground" aria-label={t("unreadMuted")} />
-        ) : (
-          <span className="rounded-full bg-primary px-1.5 text-[11px] leading-5 font-semibold text-primary-foreground">
-            {cap(unread)}
+      <span className="relative shrink-0">
+        <ChannelFaces channel={channel} />
+        {unread > 0 && !active ? (
+          channel.muted ? (
+            <span
+              className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-background"
+              aria-label={t("unreadMuted")}
+            />
+          ) : (
+            <span
+              className="absolute -top-1.5 -right-1.5 min-w-4.5 rounded-full bg-destructive px-1 text-center text-[10px] leading-4.5 font-semibold text-white ring-2 ring-background"
+              aria-label={t("list.unread", { count: unread })}
+            >
+              {cap(unread)}
+            </span>
+          )
+        ) : null}
+        {announcements > 0 ? (
+          <span
+            className="absolute -right-1 -bottom-1 flex size-4.5 items-center justify-center rounded-full bg-warning text-primary-foreground ring-2 ring-background"
+            aria-label={t("unseenAnnouncements", { count: announcements })}
+          >
+            <MegaphoneIcon className="size-2.5" />
           </span>
-        )
-      ) : null}
+        ) : null}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-baseline gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
+          {inactive ? (
+            <span className="shrink-0 text-[10px] text-muted-foreground">
+              {channel.ended ? t("endedTag") : t("archivedTag")}
+            </span>
+          ) : channel.preview ? (
+            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{time(channel.preview.at)}</span>
+          ) : null}
+        </span>
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            {announcements > 0 ? (
+              <span className="text-warning">{t("list.announcementTag", { count: cap(announcements) })} </span>
+            ) : channel.muted && unread > 0 ? (
+              <span>{t("list.mutedCount", { count: cap(unread) })} </span>
+            ) : null}
+            {preview ?? "\u00a0"}
+          </span>
+          {channel.muted ? <BellOffIcon className="size-3 shrink-0" aria-label={t("list.muted")} /> : null}
+        </span>
+      </span>
     </Link>
   );
 }
 
-function ChannelIcon({ channel }: { channel: Channel }) {
-  switch (channel.type) {
-    case "dm":
-      return channel.otherUser ? (
-        <PersonAvatar person={channel.otherUser} className="size-5" />
-      ) : (
-        <UsersRoundIcon className="size-4 shrink-0" />
-      );
-    case "group":
-      return <UsersRoundIcon className="size-4 shrink-0" />;
-    default:
-      return <HashIcon className="size-4 shrink-0" />;
+type Preview = NonNullable<Channel["preview"]>;
+
+/** "Alice: 今晚开会" — the sender is left out of DMs unless it's the viewer. */
+function usePreviewText() {
+  const t = useTranslations("chat.list");
+  const locale = useLocale() as Locale;
+  const viewer = useViewer();
+  const plain = usePlainPreview();
+  return (channel: Channel, preview: Preview) => {
+    const mine = preview.authorId === viewer._id;
+    const author = mine ? t("you") : displayName(preview.people.find((p) => p._id === preview.authorId), locale);
+    if (preview.state === "recalled") return t("recalled", { name: author });
+    if (preview.state === "removed") return t("removed");
+    const content =
+      preview.kind === "forward"
+        ? t("forward")
+        : preview.kind === "task"
+          ? t("task")
+          : preview.kind === "doc"
+            ? t("doc")
+            : plain(preview.body, preview.people, 80) || t("attachment");
+    const text = preview.announcement ? `${t("announcement")} ${content}` : content;
+    if (channel.type === "dm" && !mine) return text;
+    return t("withSender", { name: author, text });
+  };
+}
+
+/** WeChat-style stamp: time today, "昨天", a weekday this week, then a date. */
+function useListTime() {
+  const t = useTranslations("chat.list");
+  const format = useFormatter();
+  const now = useNow({ updateInterval: 60_000 });
+  return (at: number) => {
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const day = 24 * 60 * 60 * 1000;
+    const date = new Date(at);
+    if (at >= startOfToday.getTime()) return format.dateTime(date, { hour: "2-digit", minute: "2-digit", hour12: false });
+    if (at >= startOfToday.getTime() - day) return t("yesterday");
+    if (at >= startOfToday.getTime() - 6 * day) return format.dateTime(date, { weekday: "short" });
+    if (date.getFullYear() === now.getFullYear()) return format.dateTime(date, { month: "numeric", day: "numeric" });
+    return format.dateTime(date, { year: "numeric", month: "numeric", day: "numeric" });
+  };
+}
+
+const FACE_GRID: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-2", 4: "grid-cols-2" };
+
+/** A DM shows the other person; team chats a grid of up to 9 members; the org chat the CSSA mark. */
+function ChannelFaces({ channel }: { channel: Channel }) {
+  const box = "size-11 overflow-hidden rounded-md bg-secondary";
+  if (channel.type === "dm") {
+    return channel.otherUser ? (
+      <PersonAvatar person={channel.otherUser} className={cn(box, "after:rounded-md [&>*]:rounded-md")} />
+    ) : (
+      <span className={cn(box, "flex items-center justify-center text-muted-foreground")}>
+        <UsersRoundIcon className="size-5" />
+      </span>
+    );
   }
+  if (channel.type === "org") {
+    return (
+      <span className={cn(box, "flex items-center justify-center bg-primary/10 p-1")}>
+        <Image src={logoMark} alt="" className="h-auto w-full" />
+      </span>
+    );
+  }
+  const faces = channel.faces ?? [];
+  if (faces.length === 0) {
+    return (
+      <span className={cn(box, "flex items-center justify-center text-muted-foreground")}>
+        {channel.type === "group" ? <UsersRoundIcon className="size-5" /> : <HashIcon className="size-5" />}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        box,
+        "grid content-center gap-px bg-muted p-px",
+        FACE_GRID[faces.length] ?? "grid-cols-3",
+        faces.length === 3 && "[&>*:first-child]:col-span-2 [&>*:first-child]:mx-auto [&>*:first-child]:w-1/2",
+      )}
+    >
+      {faces.map((face) => (
+        <PersonAvatar
+          key={face._id}
+          person={face}
+          className="aspect-square size-auto w-full rounded-[2px] after:hidden [&>*]:rounded-[2px] [&>span]:text-[7px]"
+        />
+      ))}
+    </span>
+  );
 }

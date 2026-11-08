@@ -9,6 +9,7 @@ import { matchesPerson } from "@/components/people/use-people";
 import type { UserSummaryLike } from "@/components/people/types";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
+import { isImeEnter } from "@/lib/keyboard";
 import { cn } from "@/lib/utils";
 import type { MentionItem } from "./extensions";
 
@@ -30,7 +31,7 @@ function MentionList({ ref, ...props }: ListProps & { ref?: Ref<ListHandle> }) {
         setSelection({ query: props.query, index: (index + delta + props.items.length) % props.items.length });
         return true;
       }
-      if ((event.key === "Enter" || event.key === "Tab") && !event.isComposing) {
+      if ((event.key === "Enter" || event.key === "Tab") && !isImeEnter(event)) {
         pick(props.items[index]);
         return true;
       }

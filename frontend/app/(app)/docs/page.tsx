@@ -48,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, LIMITS } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
+import { useEnterSubmit } from "@/lib/keyboard";
 import { filesHref } from "@/lib/links";
 import type { Locale } from "@/lib/locale-store";
 import { displayName, localized } from "@/lib/names";
@@ -253,6 +254,9 @@ function RenameDialog({ doc, open, onClose }: { doc: Doc; open: boolean; onClose
     rename({ documentId: doc._id, title })
       .then(onClose)
       .catch(showError);
+  const enter = useEnterSubmit(() => {
+    if (title.trim()) void save();
+  });
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -264,7 +268,7 @@ function RenameDialog({ doc, open, onClose }: { doc: Doc; open: boolean; onClose
           value={title}
           maxLength={LIMITS.documentTitle}
           onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && title.trim() && void save()}
+          {...enter}
         />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

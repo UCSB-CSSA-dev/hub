@@ -145,6 +145,38 @@ describe("tasks", () => {
     expect(list[0]).toMatchObject({ total: 1, done: 1, toReview: 0 });
   });
 
+  test("the lead, an admin, or the owner can mark an assignee complete without a submission", async () => {
+    const t = setup();
+    const { admin, lead, alice, bob, events } = await team(t);
+    const assignmentId = await lead.as.mutation(api.assignments.create, taskArgs(events, [alice.userId, bob.userId]));
+    const task = await lead.as.query(api.assignments.get, { assignmentId });
+    const row = (userId: Id<"users">) => task!.assignees.find((a) => a.userId === userId)!.submissionId;
+
+    await expect(
+      bob.as.mutation(api.assignments.review, { submissionId: row(alice.userId), decision: "complete" }),
+    ).rejects.toThrow(/NOT_FOUND|FORBIDDEN/);
+    await expect(
+      alice.as.mutation(api.assignments.review, { submissionId: row(alice.userId), decision: "complete" }),
+    ).rejects.toThrow(/FORBIDDEN/);
+
+    await lead.as.mutation(api.assignments.review, { submissionId: row(alice.userId), decision: "complete" });
+    expect((await alice.as.query(api.assignments.listMine, {}))[0].myStatus).toBe("approved");
+    expect(await alice.as.query(api.assignments.myOpenCount, {})).toBe(0);
+    const reviewed = (await notificationsOf(t, alice.userId)).filter((n) => n.type === "submission_reviewed");
+    expect(reviewed.map((n) => n.params.decision)).toEqual(["complete"]);
+    await expect(
+      lead.as.mutation(api.assignments.review, { submissionId: row(alice.userId), decision: "complete" }),
+    ).rejects.toThrow(/INVALID/);
+
+    await bob.as.mutation(api.assignments.submit, { assignmentId, text: "done", fileIds: [] });
+    await expect(
+      admin.as.mutation(api.assignments.review, { submissionId: row(bob.userId), decision: "complete" }),
+    ).rejects.toThrow(/INVALID/);
+    await lead.as.mutation(api.assignments.close, { assignmentId });
+    await admin.as.mutation(api.assignments.review, { submissionId: row(bob.userId), decision: "approve" });
+    expect(await lead.as.query(api.assignments.listCreatedByMe, {})).toMatchObject([{ total: 2, done: 2, toReview: 0 }]);
+  });
+
   test("submission files go to the department space's task folder", async () => {
     const t = setup();
     const { lead, alice, events } = await team(t);

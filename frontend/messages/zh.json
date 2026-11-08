@@ -31,7 +31,6 @@
     "formerViceChair": "前副主席"
   },
   "nav": {
-    "appearance": "外观",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式",
     "chat": "聊天",
@@ -296,7 +295,24 @@
     "saveToFiles": "保存到文件",
     "documents": "文档",
     "newDocument": "新建协作文档",
-    "allDocuments": "聊天文档"
+    "allDocuments": "聊天文档",
+    "messageActions": "消息操作",
+    "list": {
+      "unread": "{count} 条未读消息",
+      "announcementTag": "[{count} 条公告]",
+      "mutedCount": "[{count} 条]",
+      "muted": "免打扰",
+      "you": "你",
+      "withSender": "{name}: {text}",
+      "recalled": "{name} 撤回了一条消息",
+      "removed": "一条消息已被移除",
+      "forward": "[聊天记录]",
+      "task": "[任务]",
+      "doc": "[文档]",
+      "attachment": "[附件]",
+      "announcement": "[公告]",
+      "yesterday": "昨天"
+    }
   },
   "roster": {
     "title": "组织架构",
@@ -415,11 +431,8 @@
     "language": "界面语言",
     "push": "推送通知",
     "pushHint": "有新消息（免打扰的聊天除外）、有人 @你或回复你、发布公告，或审批结果出来时，在这台设备上用系统通知提醒你，不用打开 CSSA Hub。每台设备需要分别开启。",
-    "pushOn": "已开启",
-    "pushEnable": "开启通知",
     "pushEnabled": "已开启，稍后会收到一条测试通知",
     "pushEnableFailed": "开启失败，请稍后再试",
-    "pushDisable": "在这台设备上关闭",
     "pushDenied": "浏览器已阻止本网站的通知。请在浏览器的网站设置中允许通知，然后刷新页面。",
     "pushUnsupported": "这个浏览器不支持推送通知。",
     "pushIosInstall": "在 iPhone 上，需要先把 CSSA Hub 添加到主屏幕，并从主屏幕打开，才能开启通知。",
@@ -472,7 +485,36 @@
     "save": "保存",
     "publicPageLink": "查看「关于我们」页面",
     "showEmailPublicly": "在「关于我们」公开页面显示我的邮箱",
-    "showEmailPubliclyHint": "默认隐藏。勾选后任何人都能看到 {email}。"
+    "showEmailPubliclyHint": "默认隐藏。勾选后任何人都能看到 {email}。",
+    "deviceFilesTitle": "本设备上的文件",
+    "deviceFilesBody": "在应用里打开过的图片和文件会保存在这台设备上，再次打开时不用重新下载。不会自动过期，退出登录时会清空。",
+    "deviceFilesSummary": "{count} 个文件，共 {size}",
+    "deviceFilesOlderThan": "删除保存超过",
+    "deviceFilesDays": "{days} 天的文件",
+    "deviceFilesDeleteOlder": "删除",
+    "deviceFilesDeleteAll": "全部删除",
+    "deviceFilesDeleteAllBody": "这台设备上保存的文件都会被删除，之后打开时会重新下载。",
+    "deviceFilesKeptOn": "{date} 保存",
+    "deviceFilesDelete": "删除 {name}",
+    "deviceFilesRemoved": "已删除 {count} 个文件",
+    "tabs": {
+      "personal": "个人信息",
+      "notifications": "通知",
+      "general": "通用"
+    },
+    "display": "显示",
+    "theme": "外观",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "fontSize": "字体大小",
+    "fontSizeHint": "只作用于这台设备。",
+    "fontSizes": {
+      "small": "小",
+      "default": "标准",
+      "large": "大",
+      "larger": "特大"
+    },
+    "pushThisDevice": "在这台设备上接收通知"
   },
   "weekdays": {
     "0": "周日",
@@ -543,6 +585,7 @@
     "submissionReceived": "{actor} 提交了「{title}」",
     "submissionApproved": "{actor} 通过了你的「{title}」",
     "submissionChanges": "{actor} 请你修改「{title}」",
+    "submissionCompleted": "{actor} 把你的「{title}」标记为已完成",
     "assignmentComment": "{actor} 评论了「{title}」",
     "docMention": "{actor} 在文档「{title}」中提到了你",
     "taskMention": "{actor} 在{kind}「{title}」中提到了你"
@@ -906,7 +949,10 @@
     "driveNotConfigured": "「{name}」需要存到 Google Drive，但还没有连接 Apps Script，请联系主席团。",
     "driveFailed": "「{name}」上传到 Google Drive 失败，请稍后再试。",
     "openInDrive": "在 Google Drive 中打开",
-    "inDrive": "Google Drive"
+    "inDrive": "Google Drive",
+    "keptOnDevice": "已保存在本设备",
+    "previewFailed": "无法打开这个文件。",
+    "openOriginal": "打开原文件"
   },
   "tasks": {
     "title": "任务",
@@ -1053,7 +1099,11 @@
     "changesToast": "已要求修改",
     "reviewHint": "已通过的提交也可以再次要求修改。",
     "descriptionTooLong": "说明太长了（最多 {max} 个字符，每个 @ 也占用字符）",
-    "nobodyInChat": "这个聊天里还没有已通过审批的成员，发布后没有人会收到。请先添加成员，或取消勾选并指定具体的人。"
+    "nobodyInChat": "这个聊天里还没有已通过审批的成员，发布后没有人会收到。请先添加成员，或取消勾选并指定具体的人。",
+    "markComplete": "标记完成",
+    "markedCompleteToast": "已标记为完成",
+    "markCompleteHint": "不需要对方提交，直接记为完成。之后仍可要求修改。",
+    "completedWithoutSubmission": "未提交，已由负责人标记为完成。"
   },
   "docs": {
     "title": "文档",

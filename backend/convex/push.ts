@@ -59,7 +59,7 @@ export const sendTest = mutation({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireApproved(ctx);
-    await queuePush(ctx, [viewer.user._id], { type: "test", params: {}, link: "/settings/", tag: "test" });
+    await queuePush(ctx, [viewer.user._id], { type: "test", params: {}, link: "/settings/?tab=notifications", tag: "test" });
   },
 });
 

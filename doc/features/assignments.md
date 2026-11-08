@@ -61,6 +61,8 @@ stateDiagram-v2
   submitted --> approved: reviewer approves
   submitted --> changes_requested: reviewer requests changes
   changes_requested --> submitted: resubmit
+  assigned --> approved: reviewer marks complete
+  changes_requested --> approved: reviewer marks complete
 ```
 
 - With "需要提交 / Requires submission" off, the assignee only clicks "标记完成 / Mark done". With "自动通过 / Auto-approve" on, marking done goes straight to `approved`.
@@ -120,13 +122,14 @@ On phones the bottom bar's 任务 tab opens this page; 部长 and 主席团 swit
 
 - **Everyone in the chat:** title, description, files, time and place, and who is assigned with their status. Submissions and comments aren't shown.
 - **Assignees:** also their submission form (text, files, link), status, and the comment thread with the reviewers.
-- **Creator and reviewers:** a table of assignees with status, submitted time and a late flag. Opening a row shows the submission, Approve and Request changes buttons, and the comment thread. For events: the helper list and the prep tasks.
+- **Creator and reviewers:** a table of assignees with status, submitted time and a late flag. Opening a row shows the submission, Approve and Request changes buttons (Mark complete when nothing was submitted), and the comment thread. For events: the helper list and the prep tasks.
 
 ## Review
 
 - Reviewers are the creator, the 部长 of the departments that could create in the task's chat, and 主席团.
 - Approve sets `status = "approved"`, `reviewedBy` and `reviewedAt`, and notifies the assignee (`submission_reviewed`).
 - Request changes requires a comment, sets `changes_requested`, and notifies the assignee.
+- **Mark complete (标记完成):** like grading in Canvas without a submission, a reviewer can mark an assignee who hasn't submitted (`assigned` or `changes_requested`) as `approved`, from the check button on their row or in their submission sheet, with an optional comment. It works on open and closed tasks, not on events, and notifies the assignee (`submission_reviewed` with `decision: "complete"`). The assignee sees "未提交，已由负责人标记为完成". Request changes still works afterwards.
 - Comments (`assignmentComments`) form a thread on each submission. The assignee and the reviewers can comment at any time, and each comment notifies the other side (`assignment_comment`).
 
 ## Files

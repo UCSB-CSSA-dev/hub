@@ -25,7 +25,7 @@ Every notification below is in-app and pushed. Email is only the [daily digest](
 | Task overdue (once) | The same | `assignment_overdue` |
 | Event starts in 24 hours | Helpers | `event_soon` |
 | Submission received | Creator | `submission_received` |
-| Submission approved or changes requested | Assignee | `submission_reviewed` |
+| Submission approved, changes requested, or marked complete by a reviewer | Assignee | `submission_reviewed` (`decision`: `approve`, `request_changes`, `complete`) |
 | New comment on a submission | The other side (assignee or reviewers) | `assignment_comment` |
 | @mentioned in a document | Newly mentioned people who can open it | `doc_mention` |
 | @mentioned in a task or event description | Newly mentioned people in the chat (not those just assigned) | `task_mention` |

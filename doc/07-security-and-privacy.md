@@ -93,6 +93,7 @@ These are inlined into the static bundle at build time, so they must never hold 
   - Email jobs: 30 days after sending.
   - Audit logs: kept indefinitely (at least 2 years).
 - **Leaving CSSA.** Deactivated users' content stays for organizational continuity. A user can ask presidium to delete files they uploaded; presidium can delete them from Files.
+- **Files kept on a device.** Files opened in the app stay in that browser's IndexedDB until the user deletes them in Settings or signs out. See [files.md](features/files.md#kept-on-this-device).
 - No analytics or third-party trackers in v1.
 
 ## Operational checklist before launch

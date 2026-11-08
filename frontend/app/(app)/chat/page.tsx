@@ -40,7 +40,7 @@ function Chat() {
     <div className="flex min-h-0 flex-1">
       <div
         className={cn(
-          "min-h-0 w-full flex-col border-r border-border lg:flex lg:w-64",
+          "min-h-0 w-full flex-col border-r border-border lg:flex lg:w-72",
           showConversationOnMobile ? "hidden" : "flex",
         )}
       >
