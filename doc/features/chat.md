@@ -11,7 +11,7 @@ The decisions behind this design are in [09-roadmap.md, Stage 2](../09-roadmap.m
 | Type | Created by | Who reads | Who posts | Name |
 | --- | --- | --- | --- | --- |
 | `org` | Seed | All approved users (implicit) | All approved users; announcements: admins | "全体 / General" |
-| `department` | With the department | That department's members (derived) | Readers; announcements: that department's 部长, admins | Department name |
+| `department` | With the department | That department's members (derived); the 主席团 chat also includes every 部长 of a regular department | Readers; announcements: that department's 部长, admins | Department name |
 | `group` | Proposal approved by a 部长, or created directly by a 部长 / admin | Explicit members, plus the 部长 of every involved department (derived), plus 主席团 during a takeover | Readers | Custom name |
 | `dm` | Any approved user | Exactly 2 | Both, unless one is deactivated | Other person's name |
 
@@ -27,7 +27,7 @@ Until 2026-10 announcements had their own `announcement` channels ("CSSA 公告"
 - `messages.send` with `announcement: true` requires `canAnnounce`. The message is stored with `announcement: true` and notifies everyone who reads the chat except the author (type `announcement`, batches of 200, with push), even if they muted the chat. Mentions and replies inside an announcement add no separate notifications.
 - In the timeline an announcement has an amber left border and a "公告" tag next to the author, and never groups with neighboring messages.
 - **Unseen until acknowledged:** reading the chat doesn't dismiss an announcement. `channelMembers.announcementsReadAt` tracks acknowledgement separately from `lastReadAt`:
-  - The chat list shows an amber badge with a megaphone and the count of unseen announcements instead of the gold unread badge. It shows even when the chat is muted.
+  - The chat list puts an amber megaphone badge on the chat's avatar box and starts the preview with "[N 条公告]". It shows even when the chat is muted.
   - Opening the chat shows a bar under the header with the newest unseen announcement ("N 条未读公告 · 作者：内容"). Tapping it jumps to the message; the arrow steps through older unseen ones; "知道了" acknowledges all of them (`channels.markAnnouncementsSeen`).
 - Recalled or removed announcements stop counting.
 
@@ -52,9 +52,11 @@ Until 2026-10 announcements had their own `announcement` channels ("CSSA 公告"
 +-------------------+---------------------------------------------+
 ```
 
-- Unread counts are gold badges; muted chats show a grey dot instead. Every new message pushes to devices with notifications on, except in muted chats (see [Push notifications](notifications-and-email.md#push-notifications)). Unseen announcements replace the badge with an amber megaphone badge (see [Announcements](#announcements-公告)). Ended groups and archived channels are dimmed with a tag.
+- Chat list rows are WeChat-style, under the same 全体 / 部门 / 群聊 / 私信 headers: an avatar box on the left (the other person for DMs, a grid of up to 9 member photos for department and group chats, the CSSA mark for 全体), then the name with the latest message's time, and below it the latest message as "sender: text" (DMs leave the sender out unless it's you; recalled and removed messages, forwards, task and doc cards, and attachments get labels). `channels.listMine` returns `preview` and `faces` for this; the oversight list doesn't get previews, so reading message text there still goes through the logged chat view.
+- Unread counts are red bubbles on the avatar box; muted chats show a dot instead and a bell-off icon on the row. Every new message pushes to devices with notifications on, except in muted chats (see [Push notifications](notifications-and-email.md#push-notifications)). Unseen announcements replace the badge with an amber megaphone badge (see [Announcements](#announcements-公告)). Ended groups and archived channels are dimmed with a tag.
 - The 群聊 header has the proposals button (with a dot when something waits for the viewer) and "+" (propose for 部员, create for 部长 and admins).
 - The 监督 section shows only for admins and 部长.
+- The people icon in the conversation header (left of the 👁) opens the member list (`channels.members`): a centered dialog on phones, a full-height panel on the right from `md` up. 主席团 come first, then 部长 with their departments, then everyone else; a search box appears from 12 members.
 - Below the `lg` breakpoint (1024px), including tablets where the app sidebar is still shown, the channel list and the conversation are separate screens; the conversation header has a back arrow to the list. From `lg` up they sit side by side and the org channel opens by default.
 - URL parameters on `/chat/`: `c` (channel), `m` (jump to a message), `app` (open a chat app), `proposals=1` (open the group proposals dialog), `oversee=<userId>` (oversight view of one person).
 
