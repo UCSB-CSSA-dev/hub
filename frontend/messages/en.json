@@ -312,6 +312,14 @@
       "attachment": "[Attachment]",
       "announcement": "[Announcement]",
       "yesterday": "Yesterday"
+    },
+    "members": {
+      "title": "Members",
+      "titleCount": "Members ({count})",
+      "search": "Search members",
+      "presidium": "Presidium",
+      "lead": "Lead",
+      "none": "No members found"
     }
   },
   "roster": {

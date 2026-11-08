@@ -38,6 +38,7 @@ import { useHiddenMessages } from "@/lib/hidden-messages";
 import type { Locale } from "@/lib/locale-store";
 import { displayName, localized } from "@/lib/names";
 import { useChat } from "./chat-context";
+import { ChatMembersButton } from "./chat-members";
 
 export function ChatHeader({
   title,
@@ -84,6 +85,7 @@ export function ChatHeader({
       }
     >
       {extra}
+      <ChatMembersButton />
       <MonitoredIcon />
       <Button size="icon-sm" variant="ghost" aria-label={t("searchTitle")} onClick={onSearch}>
         <SearchIcon />

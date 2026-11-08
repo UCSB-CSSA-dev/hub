@@ -131,3 +131,30 @@ describe("部长 promotions", () => {
     ).rejects.toThrow(/TOO_MANY_LEADS/);
   });
 });
+
+describe("主席团 chat", () => {
+  test("every 部长 is a member; regular members aren't", async () => {
+    const { t, admin, chair } = await presidiumSetup();
+    const lead = await addMember(t, admin.as, "lead@ucsb.edu", "events", "lead");
+    const member = await addMember(t, admin.as, "member@ucsb.edu", "events");
+    const presidium = await departmentBySlug(t, "presidium");
+    const chatOf = async (as: typeof lead.as) =>
+      (await as.query(api.channels.listMine, {})).departments.find((c) => c.departmentId === presidium._id);
+
+    const chat = await chatOf(lead.as);
+    expect(chat).toBeDefined();
+    expect(await chatOf(member.as)).toBeUndefined();
+    await lead.as.mutation(api.messages.send, { channelId: chat!._id, body: "部长报到" });
+    await expect(
+      member.as.query(api.messages.list, { channelId: chat!._id, paginationOpts: { numItems: 10, cursor: null } }),
+    ).rejects.toThrow(/NOT_FOUND/);
+
+    const members = await chair.as.query(api.channels.members, { channelId: chat!._id });
+    expect(members.find((m) => m._id === chair.userId)?.role).toBe("presidium");
+    expect(members.find((m) => m._id === lead.userId)).toMatchObject({
+      role: "lead",
+      departments: [expect.objectContaining({ nameEn: "Events" })],
+    });
+    expect(members.some((m) => m._id === member.userId)).toBe(false);
+  });
+});

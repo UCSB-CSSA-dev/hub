@@ -312,6 +312,14 @@
       "attachment": "[附件]",
       "announcement": "[公告]",
       "yesterday": "昨天"
+    },
+    "members": {
+      "title": "聊天成员",
+      "titleCount": "聊天成员（{count}）",
+      "search": "搜索成员",
+      "presidium": "主席团",
+      "lead": "部长",
+      "none": "没有找到成员"
     }
   },
   "roster": {
