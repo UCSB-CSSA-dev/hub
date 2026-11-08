@@ -371,3 +371,69 @@ export async function touchReadState(
   if (row) await ctx.db.patch("channelMembers", row._id, { lastReadAt: at });
   else await ctx.db.insert("channelMembers", { channelId, userId, lastReadAt: at });
 }
+
+/** The chats in the viewer's list: the org chat, their departments (every one for admins), groups and DMs. */
+export async function myChannels(ctx: QueryCtx, viewer: ViewerContext) {
+  const departments = new Map(
+    (await ctx.db.query("departments").collect()).map((d) => [d._id, d]),
+  );
+  const sortOrder = (c: Doc<"channels">) =>
+    c.departmentId ? (departments.get(c.departmentId)?.sortOrder ?? 0) : -1;
+  const visibleDepartment = (c: Doc<"channels">) => {
+    if (!c.departmentId) return true;
+    const department = departments.get(c.departmentId);
+    return (
+      department !== undefined &&
+      !department.archivedAt &&
+      (viewer.isAdmin || viewer.memberDepartmentIds.includes(department._id))
+    );
+  };
+
+  const org = await ctx.db
+    .query("channels")
+    .withIndex("by_type", (q) => q.eq("type", "org"))
+    .collect();
+  const departmentChannels = (
+    await ctx.db
+      .query("channels")
+      .withIndex("by_type", (q) => q.eq("type", "department"))
+      .collect()
+  )
+    .filter((c) => c.departmentId !== undefined && visibleDepartment(c))
+    .sort((a, b) => sortOrder(a) - sortOrder(b));
+
+  const myRows = await ctx.db
+    .query("channelMembers")
+    .withIndex("by_user", (q) => q.eq("userId", viewer.user._id))
+    .collect();
+  const dmChannels: Doc<"channels">[] = [];
+  const groupIds = new Set<Id<"channels">>();
+  for (const row of myRows) {
+    const channel = await ctx.db.get("channels", row.channelId);
+    if (channel?.type === "dm") dmChannels.push(channel);
+    if (channel?.type === "group" && row.joinedAt !== undefined) groupIds.add(channel._id);
+  }
+  for (const departmentId of viewer.ledDepartmentIds) {
+    const rows = await ctx.db
+      .query("groupDepartments")
+      .withIndex("by_department", (q) => q.eq("departmentId", departmentId))
+      .collect();
+    for (const row of rows) groupIds.add(row.channelId);
+  }
+  if (viewer.isAdmin) {
+    const groups = await ctx.db
+      .query("channels")
+      .withIndex("by_type", (q) => q.eq("type", "group"))
+      .collect();
+    for (const group of groups) {
+      if (groupIds.has(group._id)) continue;
+      if (await isTakenOver(ctx, await groupDepartmentIds(ctx, group._id))) groupIds.add(group._id);
+    }
+  }
+  const groups: Doc<"channels">[] = [];
+  for (const id of groupIds) {
+    const group = await ctx.db.get("channels", id);
+    if (group) groups.push(group);
+  }
+  return { org, departments: departmentChannels, groups, dms: dmChannels };
+}

@@ -515,6 +515,7 @@ Decisions for this stage (2026-10-22):
 - [x] Apps Script relay on a dedicated Gmail account ([06-email-apps-script.md](06-email-apps-script.md))
 - [x] `emailJobs` outbox, send action, retry cron, quota skip, dry run in dev
 - [x] `daily_digest` template in zh and en: today, events in the next week, to-dos
+- [x] Digest adds tasks due in the next 7 days, unread announcements, and unread messages per chat; Settings → Notifications picks the digest language (#10)
 - [x] Hourly cron that sends at 10:00 AM Pacific, once per person per day, only when there's something to report
 - [x] Settings: "接收邮箱 / Send my digest to"
 - [x] Admin overview email card (today's sent, failed, skipped, last error)

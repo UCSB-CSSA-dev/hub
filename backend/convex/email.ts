@@ -4,7 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation } from "./_generated/server";
 import { appsScriptConfigured, callAppsScript } from "./lib/appsScript";
 import { LIMITS } from "./lib/constants";
-import { buildDigest, digestAddress, isEmptyDigest, type Digest } from "./lib/digest";
+import { buildDigest, digestAddress, digestLocale, isEmptyDigest, type Digest } from "./lib/digest";
 import { renderDigest } from "./lib/emailTemplates";
 import { pacificDay, pacificHour } from "./lib/time";
 
@@ -38,14 +38,15 @@ export const queueDigestFor = internalMutation({
     if (!user || user.status !== "approved") return;
     const to = digestAddress(user);
     if (!to) return;
-    const digest = await buildDigest(ctx, user._id, Date.now());
+    const locale = digestLocale(user);
+    const digest = await buildDigest(ctx, user._id, Date.now(), locale);
     if (isEmptyDigest(digest)) return;
     const jobId = await ctx.db.insert("emailJobs", {
       to,
       userId: user._id,
       template: "daily_digest",
-      locale: user.locale ?? "zh",
-      params: { digest, name: (user.locale === "en" ? user.nameEn : user.nameZh) || user.name || "" },
+      locale,
+      params: { digest, name: (locale === "en" ? user.nameEn : user.nameZh) || user.name || "" },
       status: "queued",
       attempts: 0,
       sendAfter: Date.now(),

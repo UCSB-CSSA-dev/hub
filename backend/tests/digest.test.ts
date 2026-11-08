@@ -53,13 +53,14 @@ describe("pacific time", () => {
 });
 
 describe("daily digest", () => {
-  test("sorts items into today, events this week, and other to-dos", async () => {
+  test("sorts items into today, the next 7 days, and other to-dos", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(TEN_AM - 2 * DAY);
     const t = setup();
     const { lead, alice, events } = await team(t);
     await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "Overdue", TEN_AM - HOUR));
     await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "Due tonight", TEN_AM + 8 * HOUR));
+    await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "In two days", TEN_AM + 2 * DAY));
     await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "Next month", TEN_AM + 30 * DAY));
     await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "No date"));
     const done = await lead.as.mutation(api.assignments.create, task(events, [alice.userId], "Done already"));
@@ -78,7 +79,7 @@ describe("daily digest", () => {
     const digest = await t.run((ctx) => buildDigest(ctx, alice.userId, TEN_AM));
     expect(digest.today.map((i) => i.title)).toEqual(["Overdue", "Due tonight", "Tonight's social"]);
     expect(digest.today[0].overdue).toBe(true);
-    expect(digest.events.map((i) => i.title)).toEqual(["Gala"]);
+    expect(digest.week.map((i) => i.title)).toEqual(["In two days", "Gala"]);
     expect(digest.todos.map((i) => i.title)).toEqual(["Next month", "No date"]);
 
     const email = renderDigest(digest, { locale: "zh", name: "爱丽丝", siteUrl: "https://example.com/canvas/" });
@@ -91,17 +92,21 @@ describe("daily digest", () => {
     const email = renderDigest(
       {
         today: [{ title: "<script>x</script>", kind: "task", chatZh: "活动部", chatEn: "Events", link: "/assignments/" }],
-        events: [],
+        week: [],
         todos: [],
+        announcements: [{ chat: "全体", author: "<b>", text: "<img src=x>", at: TEN_AM, link: "/chat/" }],
+        chats: [{ name: "<i>", link: "/chat/", unread: 1, muted: false, messages: [{ author: "x", text: "<a>", at: TEN_AM }] }],
       },
       { locale: "en", name: "A&B", siteUrl: "https://example.com" },
     );
     expect(email.html).not.toContain("<script>");
+    expect(email.html).not.toContain("<img src=x>");
+    expect(email.html).not.toContain("<i>");
     expect(email.html).toContain("&lt;script&gt;");
     expect(email.html).toContain("A&amp;B");
   });
 
-  test("queues once a day at 10 AM Pacific, only for people with open items, and honors digestEmail", async () => {
+  test("queues once a day at 10 AM Pacific, only for people with something to show, and honors digestEmail", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(TEN_AM - DAY);
     const t = setup();
@@ -121,8 +126,55 @@ describe("daily digest", () => {
     await t.mutation(internal.email.queueDigests, {});
     await t.finishAllScheduledFunctions(vi.runAllTimers);
     const jobs = await t.run((ctx) => ctx.db.query("emailJobs").collect());
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ to: "alice.personal@gmail.com", status: "sent", day: "2026-10-26" });
+    expect(new Set(jobs.map((j) => j.userId)).size).toBe(jobs.length);
+    expect(jobs.find((j) => j.userId === alice.userId)).toMatchObject({
+      to: "alice.personal@gmail.com",
+      status: "sent",
+      day: "2026-10-26",
+    });
+    // The lead posted the task card, so nothing is unread for them and they have no open items.
+    expect(jobs.some((j) => j.userId === lead.userId)).toBe(false);
+  });
+
+  test("lists unread messages per chat and unread announcements, in the chosen language", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(TEN_AM - DAY);
+    const t = setup();
+    const { admin, alice, bob, events } = await team(t);
+    const org = (await bob.as.query(api.channels.listMine, {})).org[0]._id;
+    await alice.as.mutation(api.messages.send, { channelId: events, body: `hi <@${bob.userId}>` });
+    await alice.as.mutation(api.messages.send, { channelId: events, body: "second" });
+    await admin.as.mutation(api.messages.send, { channelId: org, body: "Gala on Friday", announcement: true });
+    await bob.as.mutation(api.users.setDigestLocale, { locale: "en" });
+
+    vi.setSystemTime(TEN_AM);
+    const digest = await t.run((ctx) => buildDigest(ctx, bob.userId, TEN_AM, "en"));
+    expect(digest.announcements).toEqual([expect.objectContaining({ chat: "General", text: "Gala on Friday" })]);
+    expect(digest.chats).toEqual([
+      expect.objectContaining({
+        name: "Events",
+        unread: 2,
+        muted: false,
+        messages: [
+          expect.objectContaining({ author: "alice", text: "hi @bob" }),
+          expect.objectContaining({ author: "alice", text: "second" }),
+        ],
+      }),
+    ]);
+
+    await bob.as.mutation(api.channels.markRead, { channelId: events });
+    expect((await t.run((ctx) => buildDigest(ctx, bob.userId, TEN_AM, "en"))).chats).toEqual([]);
+    await alice.as.mutation(api.messages.send, { channelId: events, body: "third" });
+    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true });
+    expect((await t.run((ctx) => buildDigest(ctx, bob.userId, TEN_AM, "en"))).chats).toEqual([
+      expect.objectContaining({ name: "Events", unread: 1, muted: true, messages: [] }),
+    ]);
+
+    process.env.EMAIL_DRY_RUN = "true";
+    await t.mutation(internal.email.queueDigests, {});
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const job = (await t.run((ctx) => ctx.db.query("emailJobs").collect())).find((j) => j.userId === bob.userId);
+    expect(job?.locale).toBe("en");
   });
 
   test("without the Apps Script settings, jobs are skipped instead of retried", async () => {

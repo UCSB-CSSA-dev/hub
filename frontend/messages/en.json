@@ -476,7 +476,7 @@
     "whoLeads": "{department} leads",
     "whoNoLead": "No lead yet",
     "digestTitle": "Daily email summary",
-    "digestBody": "If you have open tasks or upcoming events, you get one summary email at 10:00 AM Pacific. Nothing is sent on days with nothing to do.",
+    "digestBody": "One summary email at 10:00 AM Pacific: tasks and events for today and the next 7 days, other to-dos, unread announcements, and unread messages from each chat. Nothing is sent on days with nothing to show.",
     "digestAddress": "Send to (optional)",
     "digestUsingDefault": "Currently sent to your sign-in email, {email}.",
     "digestUsingCustom": "Currently sent to {email}.",
@@ -514,7 +514,8 @@
       "large": "Large",
       "larger": "Larger"
     },
-    "pushThisDevice": "Get notifications on this device"
+    "pushThisDevice": "Get notifications on this device",
+    "digestLanguage": "Summary language"
   },
   "weekdays": {
     "0": "Sun",

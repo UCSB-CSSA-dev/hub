@@ -476,7 +476,7 @@
     "whoLeads": "{department}部长",
     "whoNoLead": "暂无部长",
     "digestTitle": "每日邮件摘要",
-    "digestBody": "如果你有未完成的任务或即将到来的活动，每天上午 10 点（太平洋时间）会收到一封摘要邮件。没有待办时不发送。",
+    "digestBody": "每天上午 10 点（太平洋时间）发送一封摘要邮件：今天和未来一周的任务与活动、其他待办、未读公告，以及每个聊天的未读消息。没有内容时不发送。",
     "digestAddress": "接收邮箱（可选）",
     "digestUsingDefault": "目前发送到你的登录邮箱 {email}。",
     "digestUsingCustom": "目前发送到 {email}。",
@@ -514,7 +514,8 @@
       "large": "大",
       "larger": "特大"
     },
-    "pushThisDevice": "在这台设备上接收通知"
+    "pushThisDevice": "在这台设备上接收通知",
+    "digestLanguage": "摘要语言"
   },
   "weekdays": {
     "0": "周日",
