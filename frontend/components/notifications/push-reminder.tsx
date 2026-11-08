@@ -52,7 +52,7 @@ export function PushReminder() {
         ) : null}
         {guide}
         <Button asChild size="sm" variant="ghost">
-          <Link href="/settings/">{t("pushReminderSettings")}</Link>
+          <Link href="/settings/?tab=notifications">{t("pushReminderSettings")}</Link>
         </Button>
       </div>
       <IosGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useErrorToast } from "@/lib/errors";
+import { useEnterSubmit } from "@/lib/keyboard";
 
 export type ConfirmRequest = {
   title: string;
@@ -49,6 +50,9 @@ export function ConfirmPhraseDialog({
       setBusy(false);
     }
   };
+  const enter = useEnterSubmit(() => {
+    if (matches && !busy) void confirm();
+  });
 
   return (
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
@@ -73,12 +77,7 @@ export function ConfirmPhraseDialog({
             placeholder={t("confirm.placeholder")}
             aria-label={request.phrase}
             onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
+            {...enter}
           />
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>

@@ -81,6 +81,14 @@ Until 2026-10 announcements had their own `announcement` channels ("CSSA 公告"
 
 There is no delete. Recall, edit, and react are never available through oversight; removal is the only write allowed there.
 
+- **Desktop:** hovering a message shows a toolbar (react, reply, more).
+- **Phones and tablets:** touch and hold a message (about 0.45 s) to open a bottom sheet with the reaction row and the same actions. Text selection and the system callout are off on message rows on touch screens; "复制 / Copy" in the sheet copies the text.
+
+### Composer keys
+
+- Enter sends, on key **up**; Shift+Enter adds a line.
+- Enter that confirms an input-method candidate (pinyin and the like) only types it. The key-down is ignored while `isComposing` is set or the key code is 229 (Safari ends the composition before that key-down). The same rule covers @-mention pickers and every one-line dialog that submits on Enter (`lib/keyboard.ts`).
+
 ### Read state and loading
 
 - `messages.list` is paginated, 50 per page, newest first; the view loads older pages on demand.
@@ -98,7 +106,7 @@ There is no delete. Recall, edit, and react are never available through oversigh
 
 - Up to 10 files per message, 15 MB each. Larger files are rejected in the browser with a suggestion to upload to Google Drive and send the link.
 - Upload flow: `attachments.generateUploadUrl`, then `attachments.register` (server checks the size; unsent uploads expire after 24 hours), then `messages.send` attaches rows the sender owns.
-- Images get a ~320 px thumbnail made in the browser. Only the thumbnail loads inline; the full file opens on click. SVG and HTML are never rendered inline.
+- Images get a ~320 px thumbnail made in the browser. Only the thumbnail loads inline; the full file opens in the viewer dialog on click and is then kept on the device (see [files.md](files.md#previews)). SVG and HTML are never rendered inline.
 - Files are deleted 15 days after sending regardless of chat retention (`attachments.expire`, hourly). The message keeps a "文件已过期" card.
 - Convex file URLs are bearer links until the file is deleted; the notice says so.
 

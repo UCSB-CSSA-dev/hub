@@ -8,8 +8,7 @@ import {
   channelAudience,
   channelMemberRow,
   explicitMembers,
-  groupDepartmentIds,
-  isTakenOver,
+  myChannels,
   oversees,
   overseenUserIds,
   readBaseline,
@@ -21,7 +20,7 @@ import {
 } from "./lib/channels";
 import { LIMITS, RETENTION_OPTIONS } from "./lib/constants";
 import { appError } from "./lib/errors";
-import { isLiveUserContent, postSystemMessage } from "./lib/messages";
+import { isLiveUserContent, messageState, postSystemMessage, type MessageState } from "./lib/messages";
 import { toMessageViews } from "./lib/messageViews";
 import { requireApproved, type ViewerContext } from "./lib/permissions";
 import { getUserSummaries, toUserSummary, type UserSummary } from "./lib/users";
@@ -44,7 +43,60 @@ export type ChannelView = {
   muted: boolean;
   ended: boolean;
   archived: boolean;
+  /** Chat list only: the latest non-system message. */
+  preview?: ChannelPreview | null;
+  /** Chat list only: up to 9 member photos for department and group chats. */
+  faces?: UserSummary[];
 };
+
+export type ChannelPreview = {
+  authorId: Id<"users">;
+  kind: "user" | "forward" | "task" | "doc";
+  state: MessageState;
+  /** Empty unless the message is still there. */
+  body: string;
+  announcement: boolean;
+  at: number;
+  /** The author and anyone mentioned in `body`. */
+  people: UserSummary[];
+};
+
+const PREVIEW_BODY_CHARS = 200;
+const PREVIEW_SCAN = 20;
+const MAX_FACES = 9;
+
+async function channelPreview(ctx: QueryCtx, channel: Doc<"channels">): Promise<ChannelPreview | null> {
+  const recent = await ctx.db
+    .query("messages")
+    .withIndex("by_channel", (q) => q.eq("channelId", channel._id))
+    .order("desc")
+    .take(PREVIEW_SCAN);
+  const message = recent.find((m) => (m.kind ?? "user") !== "system");
+  if (!message) return null;
+  const state = messageState(message);
+  const body = state === "normal" ? message.body.slice(0, PREVIEW_BODY_CHARS) : "";
+  const people = await getUserSummaries(ctx, [message.authorId, ...(message.mentionUserIds ?? [])]);
+  return {
+    authorId: message.authorId,
+    kind: (message.kind ?? "user") as ChannelPreview["kind"],
+    state,
+    body,
+    announcement: message.announcement === true,
+    at: message._creationTime,
+    people: [...people.values()],
+  };
+}
+
+/** Adds what the chat list shows beyond the name: the latest message and, for team chats, member photos. */
+async function withListDetails(ctx: QueryCtx, channel: Doc<"channels">, view: ChannelView): Promise<ChannelView> {
+  view.preview = await channelPreview(ctx, channel);
+  if (channel.type === "department" || channel.type === "group") {
+    const ids = (await channelAudience(ctx, channel)).slice(0, MAX_FACES);
+    const people = await getUserSummaries(ctx, ids);
+    view.faces = ids.flatMap((id) => people.get(id) ?? []);
+  }
+  return view;
+}
 
 async function toChannelView(
   ctx: QueryCtx,
@@ -106,69 +158,9 @@ export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireApproved(ctx);
-    const departments = new Map(
-      (await ctx.db.query("departments").collect()).map((d) => [d._id, d]),
-    );
-    const sortOrder = (c: Doc<"channels">) =>
-      c.departmentId ? (departments.get(c.departmentId)?.sortOrder ?? 0) : -1;
-    const visibleDepartment = (c: Doc<"channels">) => {
-      if (!c.departmentId) return true;
-      const department = departments.get(c.departmentId);
-      return (
-        department !== undefined &&
-        !department.archivedAt &&
-        (viewer.isAdmin || viewer.memberDepartmentIds.includes(department._id))
-      );
-    };
-
-    const org = await ctx.db
-      .query("channels")
-      .withIndex("by_type", (q) => q.eq("type", "org"))
-      .collect();
-    const departmentChannels = (
-      await ctx.db
-        .query("channels")
-        .withIndex("by_type", (q) => q.eq("type", "department"))
-        .collect()
-    )
-      .filter((c) => c.departmentId !== undefined && visibleDepartment(c))
-      .sort((a, b) => sortOrder(a) - sortOrder(b));
-
-    const myRows = await ctx.db
-      .query("channelMembers")
-      .withIndex("by_user", (q) => q.eq("userId", viewer.user._id))
-      .collect();
-    const dmChannels: Doc<"channels">[] = [];
-    const groupIds = new Set<Id<"channels">>();
-    for (const row of myRows) {
-      const channel = await ctx.db.get("channels", row.channelId);
-      if (channel?.type === "dm") dmChannels.push(channel);
-      if (channel?.type === "group" && row.joinedAt !== undefined) groupIds.add(channel._id);
-    }
-    for (const departmentId of viewer.ledDepartmentIds) {
-      const rows = await ctx.db
-        .query("groupDepartments")
-        .withIndex("by_department", (q) => q.eq("departmentId", departmentId))
-        .collect();
-      for (const row of rows) groupIds.add(row.channelId);
-    }
-    if (viewer.isAdmin) {
-      const groups = await ctx.db
-        .query("channels")
-        .withIndex("by_type", (q) => q.eq("type", "group"))
-        .collect();
-      for (const group of groups) {
-        if (groupIds.has(group._id)) continue;
-        if (await isTakenOver(ctx, await groupDepartmentIds(ctx, group._id))) groupIds.add(group._id);
-      }
-    }
-    const groups: Doc<"channels">[] = [];
-    for (const id of groupIds) {
-      const group = await ctx.db.get("channels", id);
-      if (group) groups.push(group);
-    }
-
-    const views = (list: Doc<"channels">[]) => Promise.all(list.map((c) => toChannelView(ctx, viewer, c)));
+    const { org, departments: departmentChannels, groups, dms: dmChannels } = await myChannels(ctx, viewer);
+    const views = (list: Doc<"channels">[]) =>
+      Promise.all(list.map(async (c) => withListDetails(ctx, c, await toChannelView(ctx, viewer, c))));
     return {
       org: await views(org),
       departments: await views(departmentChannels),

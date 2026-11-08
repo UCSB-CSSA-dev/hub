@@ -527,25 +527,31 @@ async function requireSubmission(ctx: QueryCtx, viewer: ViewerContext, submissio
   return { submission, assignment, access, own };
 }
 
+const REVIEWABLE: Record<"approve" | "request_changes" | "complete", Doc<"assignmentSubmissions">["status"][]> = {
+  approve: ["submitted"],
+  request_changes: ["submitted", "approved"],
+  // Like grading in without a submission: the reviewer signs off on work done elsewhere.
+  complete: ["assigned", "changes_requested"],
+};
+
 export const review = mutation({
   args: {
     submissionId: v.id("assignmentSubmissions"),
-    decision: v.union(v.literal("approve"), v.literal("request_changes")),
+    decision: v.union(v.literal("approve"), v.literal("request_changes"), v.literal("complete")),
     comment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const viewer = await requireApproved(ctx);
     const { submission, assignment, access } = await requireSubmission(ctx, viewer, args.submissionId);
     if (!access.review || assignment.kind !== "task") throw appError("FORBIDDEN");
-    const allowed = args.decision === "approve" ? ["submitted"] : ["submitted", "approved"];
-    if (!allowed.includes(submission.status)) throw appError("INVALID", "status");
+    if (!REVIEWABLE[args.decision].includes(submission.status)) throw appError("INVALID", "status");
     const comment = cleanText(args.comment, LIMITS.taskComment, "comment");
     if (args.decision === "request_changes" && !comment) throw appError("INVALID", "comment");
     if (comment) {
       await ctx.db.insert("assignmentComments", { submissionId: submission._id, authorId: viewer.user._id, body: comment });
     }
     await ctx.db.patch("assignmentSubmissions", submission._id, {
-      status: args.decision === "approve" ? "approved" : "changes_requested",
+      status: args.decision === "request_changes" ? "changes_requested" : "approved",
       reviewedBy: viewer.user._id,
       reviewedAt: Date.now(),
     });

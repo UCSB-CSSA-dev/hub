@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { api, LIMITS, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
+import { useEnterSubmit } from "@/lib/keyboard";
 import { docHref } from "@/lib/links";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
@@ -112,6 +113,7 @@ export function NewDocumentDialog({
       setBusy(false);
     }
   };
+  const enter = useEnterSubmit(() => void submit());
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -125,7 +127,7 @@ export function NewDocumentDialog({
           maxLength={LIMITS.documentTitle}
           placeholder={t("titlePlaceholder")}
           onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void submit()}
+          {...enter}
         />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

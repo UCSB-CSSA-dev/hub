@@ -27,7 +27,8 @@ import { useErrorToast } from "@/lib/errors";
 import type { Locale } from "@/lib/locale-store";
 import { localized } from "@/lib/names";
 import { cn } from "@/lib/utils";
-import { FileTypeIcon, previewKind } from "./file-icon";
+import { FileTypeIcon } from "./file-icon";
+import { FileViewer } from "./file-viewer";
 
 export type SpaceView = FunctionReturnType<typeof api.files.listSpaces>[number];
 export type FileView = NonNullable<FunctionReturnType<typeof api.files.listFolder>>["files"][number];
@@ -519,56 +520,45 @@ export function FilePickerDialog({
 
 export function PreviewDialog({ file, onClose }: { file: FileView | null; onClose: () => void }) {
   const t = useTranslations("files");
-  const kind = file ? previewKind(file.contentType) : null;
+  const stored =
+    file && !file.drive && file.url
+      ? { url: file.url, name: file.name, contentType: file.contentType, size: file.size }
+      : null;
+  const drive = file?.drive ? file : null;
   return (
-    <Dialog open={file !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="truncate pr-6">{file?.name}</DialogTitle>
-          <DialogDescription>{file ? formatBytes(file.size) : ""}</DialogDescription>
-        </DialogHeader>
-        {file?.drive && file.previewUrl ? (
-          <div className="overflow-hidden rounded-md bg-secondary/40">
-            <iframe src={file.previewUrl} title={file.name} allow="autoplay" className="h-[70vh] w-full" />
-          </div>
-        ) : file?.url ? (
-          <div className="flex max-h-[70vh] min-h-40 items-center justify-center overflow-auto rounded-md bg-secondary/40">
-            {kind === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element -- files come from Convex storage
-              <img src={file.url} alt={file.name} className="max-h-[70vh] max-w-full object-contain" />
-            ) : kind === "pdf" ? (
-              <iframe src={file.url} title={file.name} className="h-[70vh] w-full" />
-            ) : kind === "video" ? (
-              <video src={file.url} controls className="max-h-[70vh] max-w-full" />
-            ) : kind === "audio" ? (
-              <audio src={file.url} controls />
-            ) : (
-              <div className="flex flex-col items-center gap-2 p-8 text-sm text-muted-foreground">
-                <FileTypeIcon contentType={file.contentType} name={file.name} className="size-10" />
-                {t("noPreview")}
-              </div>
-            )}
-          </div>
-        ) : null}
-        <DialogFooter>
-          {file?.drive && file.openUrl ? (
-            <Button variant="outline" asChild>
-              <a href={file.openUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLinkIcon />
-                {t("openInDrive")}
-              </a>
-            </Button>
+    <>
+      <FileViewer file={stored} onClose={onClose} />
+      <Dialog open={drive !== null} onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">{drive?.name}</DialogTitle>
+            <DialogDescription>{drive ? formatBytes(drive.size) : ""}</DialogDescription>
+          </DialogHeader>
+          {drive?.previewUrl ? (
+            <div className="overflow-hidden rounded-md bg-secondary/40">
+              <iframe src={drive.previewUrl} title={drive.name} allow="autoplay" className="h-[70vh] w-full" />
+            </div>
           ) : null}
-          {file?.url ? (
-            <Button asChild>
-              <a href={file.url} target="_blank" rel="noopener noreferrer" download={file.name}>
-                <DownloadIcon />
-                {t("download")}
-              </a>
-            </Button>
-          ) : null}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            {drive?.openUrl ? (
+              <Button variant="outline" asChild>
+                <a href={drive.openUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLinkIcon />
+                  {t("openInDrive")}
+                </a>
+              </Button>
+            ) : null}
+            {drive?.url ? (
+              <Button asChild>
+                <a href={drive.url} target="_blank" rel="noopener noreferrer" download={drive.name}>
+                  <DownloadIcon />
+                  {t("download")}
+                </a>
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

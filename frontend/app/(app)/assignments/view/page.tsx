@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
+  CheckCheckIcon,
   CheckIcon,
   ClipboardListIcon,
   ExternalLinkIcon,
@@ -30,6 +31,7 @@ import { toast } from "sonner";
 import { MarkdownView } from "@/components/docs/markdown-view";
 import { TaskDocuments } from "@/components/docs/task-documents";
 import { FileTypeIcon } from "@/components/files/file-icon";
+import { FileViewer } from "@/components/files/file-viewer";
 import { UploadPanel } from "@/components/files/upload-panel";
 import { useFileUpload } from "@/components/files/use-file-upload";
 import { PageHeader } from "@/components/layout/app-shell";
@@ -65,12 +67,15 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, LIMITS, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
+import type { FileSource } from "@/lib/file-cache";
 import { formatBytes } from "@/lib/format";
 import { docHref } from "@/lib/links";
 import type { Locale } from "@/lib/locale-store";
 import { displayName, localized } from "@/lib/names";
+import { cn } from "@/lib/utils";
 
 type Task = NonNullable<FunctionReturnType<typeof api.assignments.get>>;
 type TaskFile = Task["files"][number];
@@ -316,9 +321,11 @@ function ManageMenu({ task }: { task: Task }) {
 function FileList({ files, missing }: { files: TaskFile[]; missing: number }) {
   const t = useTranslations("tasks");
   const tDocs = useTranslations("docs");
+  const [viewing, setViewing] = useState<FileSource | null>(null);
   if (files.length === 0 && missing === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
+      <FileViewer file={viewing} onClose={() => setViewing(null)} />
       {files.map((f) => {
         const className =
           "flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm hover:bg-secondary";
@@ -333,6 +340,15 @@ function FileList({ files, missing }: { files: TaskFile[]; missing: number }) {
           <Link key={f._id} href={docHref(f.documentId)} className={className}>
             {body}
           </Link>
+        ) : !f.drive && f.url ? (
+          <button
+            key={f._id}
+            type="button"
+            onClick={() => setViewing({ url: f.url!, name: f.name, contentType: f.contentType, size: f.size })}
+            className={cn(className, "text-left")}
+          >
+            {body}
+          </button>
         ) : (
           <a key={f._id} href={f.openUrl ?? undefined} target="_blank" rel="noopener noreferrer" className={className}>
             {body}
@@ -406,7 +422,11 @@ function MyPart({ task }: { task: Task }) {
         {!open ? <p className="text-sm text-muted-foreground">{t("closedNote")}</p> : null}
         {a.requiresSubmission ? (
           <>
-            {mine.submittedAt ? <SubmissionContent text={mine.text} link={mine.link} files={mine.files} submittedAt={mine.submittedAt} /> : null}
+            {mine.submittedAt ? (
+              <SubmissionContent text={mine.text} link={mine.link} files={mine.files} submittedAt={mine.submittedAt} />
+            ) : mine.status === "approved" ? (
+              <p className="text-sm text-muted-foreground">{t("completedWithoutSubmission")}</p>
+            ) : null}
             {open && mine.status !== "approved" ? <SubmitForm task={task} /> : null}
           </>
         ) : mine.status === "assigned" || mine.status === "changes_requested" ? (
@@ -629,9 +649,14 @@ function AssigneesCard({ task, onOpen }: { task: Task; onOpen: (id: Id<"assignme
   const locale = useLocale() as Locale;
   const format = useFormatter();
   const removeAssignee = useMutation(api.assignments.removeAssignee);
+  const review = useMutation(api.assignments.review);
   const showError = useErrorToast();
   const [adding, setAdding] = useState(false);
   const a = task.assignment;
+  const markComplete = (submissionId: Id<"assignmentSubmissions">) =>
+    review({ submissionId, decision: "complete" })
+      .then(() => toast.success(t("markedCompleteToast")))
+      .catch(showError);
   const person = (id: string) => task.people.find((p) => p._id === id);
 
   if (a.status === "draft") {
@@ -704,6 +729,21 @@ function AssigneesCard({ task, onOpen }: { task: Task; onOpen: (id: Id<"assignme
               ) : (
                 <div className="flex min-w-0 flex-1 items-center gap-2 px-1 py-0.5">{content}</div>
               )}
+              {a.kind === "task" && (row.status === "assigned" || row.status === "changes_requested") ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={t("markComplete")}
+                      onClick={() => void markComplete(row.submissionId)}
+                    >
+                      <CheckCheckIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("markComplete")}</TooltipContent>
+                </Tooltip>
+              ) : null}
               {row.status === "assigned" && a.status === "open" ? (
                 <Button
                   size="icon-sm"
@@ -766,12 +806,14 @@ function SubmissionSheet({
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const decide = async (decision: "approve" | "request_changes") => {
+  const decide = async (decision: "approve" | "request_changes" | "complete") => {
     setBusy(true);
     try {
       await review({ submissionId, decision, comment: note.trim() || undefined });
       setNote("");
-      toast.success(decision === "approve" ? t("approvedToast") : t("changesToast"));
+      toast.success(
+        t(decision === "approve" ? "approvedToast" : decision === "complete" ? "markedCompleteToast" : "changesToast"),
+      );
     } catch (error) {
       showError(error);
     } finally {
@@ -802,7 +844,9 @@ function SubmissionSheet({
               {submission.submittedAt ? (
                 <SubmissionContent text={submission.text} link={submission.link} files={submission.files} submittedAt={submission.submittedAt} />
               ) : (
-                <p className="text-sm text-muted-foreground">{t("notSubmittedYet")}</p>
+                <p className="text-sm text-muted-foreground">
+                  {submission.status === "approved" ? t("completedWithoutSubmission") : t("notSubmittedYet")}
+                </p>
               )}
               {submission.status === "submitted" || submission.status === "approved" ? (
                 <ReviewBox
@@ -813,7 +857,22 @@ function SubmissionSheet({
                   onApprove={() => void decide("approve")}
                   onRequestChanges={() => void decide("request_changes")}
                 />
-              ) : null}
+              ) : (
+                <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+                  <Textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    maxLength={LIMITS.taskComment}
+                    rows={2}
+                    placeholder={t("reviewNotePlaceholder")}
+                  />
+                  <Button size="sm" className="self-end" disabled={busy} onClick={() => void decide("complete")}>
+                    <CheckCheckIcon />
+                    {t("markComplete")}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">{t("markCompleteHint")}</p>
+                </div>
+              )}
               <Comments submissionId={submissionId} />
             </div>
           )}

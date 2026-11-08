@@ -90,9 +90,10 @@ These are inlined into the static bundle at build time, so they must never hold 
   - Recalled and moderator-removed messages: content erased immediately; only the placeholder row remains.
   - Files (Stage 3): kept until deleted, then 30 days in trash before purge.
   - Notifications: read ones are deleted after 90 days.
-  - Email jobs: 30 days after sending.
+  - Email jobs: 30 days after sending. A digest job holds the text of the unread messages it listed, so this also bounds how long those copies live.
   - Audit logs: kept indefinitely (at least 2 years).
 - **Leaving CSSA.** Deactivated users' content stays for organizational continuity. A user can ask presidium to delete files they uploaded; presidium can delete them from Files.
+- **Files kept on a device.** Files opened in the app stay in that browser's IndexedDB until the user deletes them in Settings or signs out. See [files.md](features/files.md#kept-on-this-device).
 - No analytics or third-party trackers in v1.
 
 ## Operational checklist before launch
