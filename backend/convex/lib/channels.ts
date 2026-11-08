@@ -88,6 +88,23 @@ export async function activeLeadIds(ctx: QueryCtx, departmentId: Id<"departments
   return users.filter((u) => u?.status === "approved").map((u) => u!._id);
 }
 
+/** Every active 部长 of a regular department; they're members of the 主席团 chat. */
+export async function allLeadIds(ctx: QueryCtx): Promise<Id<"users">[]> {
+  const departments = await ctx.db
+    .query("departments")
+    .withIndex("by_kind", (q) => q.eq("kind", "regular"))
+    .collect();
+  const ids = new Set<Id<"users">>();
+  for (const department of departments) {
+    for (const id of await activeLeadIds(ctx, department._id)) ids.add(id);
+  }
+  return [...ids];
+}
+
+async function isPresidiumDepartment(ctx: QueryCtx, departmentId: Id<"departments">) {
+  return (await ctx.db.get("departments", departmentId))?.kind === "presidium";
+}
+
 /** 主席团 take over a group while any involved department is archived or has no 部长. */
 export async function isTakenOver(ctx: QueryCtx, departmentIds: Id<"departments">[]) {
   for (const departmentId of departmentIds) {
@@ -108,6 +125,7 @@ async function isParticipant(
     case "department": {
       if (!channel.departmentId) return true;
       if (viewer.isAdmin || viewer.memberDepartmentIds.includes(channel.departmentId)) return true;
+      if (viewer.ledDepartmentIds.length > 0 && (await isPresidiumDepartment(ctx, channel.departmentId))) return true;
       // Former members keep read access to an archived department's channels.
       return (await findMembership(ctx, viewer.user._id, channel.departmentId)) !== null;
     }
@@ -278,7 +296,8 @@ export async function userParticipates(ctx: QueryCtx, userId: Id<"users">, chann
 
 /**
  * Who should get channel-wide notifications (announcements, @all): department members for
- * department channels, everyone for org-wide ones, members for groups and DMs.
+ * department channels (plus every 部长 for the 主席团 chat), everyone for org-wide ones,
+ * members for groups and DMs.
  */
 export async function channelAudience(ctx: QueryCtx, channel: Doc<"channels">): Promise<Id<"users">[]> {
   const ids = new Set<Id<"users">>();
@@ -297,6 +316,9 @@ export async function channelAudience(ctx: QueryCtx, channel: Doc<"channels">): 
       .withIndex("by_department", (q) => q.eq("departmentId", departmentId))
       .collect();
     for (const row of rows) ids.add(row.userId);
+    if (await isPresidiumDepartment(ctx, departmentId)) {
+      for (const id of await allLeadIds(ctx)) ids.add(id);
+    }
   } else {
     for (const row of await explicitMembers(ctx, channel)) ids.add(row.userId);
     if (channel.type === "group") {
@@ -385,7 +407,9 @@ export async function myChannels(ctx: QueryCtx, viewer: ViewerContext) {
     return (
       department !== undefined &&
       !department.archivedAt &&
-      (viewer.isAdmin || viewer.memberDepartmentIds.includes(department._id))
+      (viewer.isAdmin ||
+        viewer.memberDepartmentIds.includes(department._id) ||
+        (department.kind === "presidium" && viewer.ledDepartmentIds.length > 0))
     );
   };
 

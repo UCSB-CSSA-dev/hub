@@ -10,6 +10,7 @@ import {
   explicitMembers,
   myChannels,
   oversees,
+  presidiumUserIds,
   overseenUserIds,
   readBaseline,
   requireChannelAccess,
@@ -234,6 +235,51 @@ export const participants = query({
 });
 
 /** Who can view a chat beyond its participants, for the monitored icon. */
+export type ChannelMember = UserSummary & {
+  /** 主席团 member, or a 部长 (with the departments they lead); null for everyone else. */
+  role: "presidium" | "lead" | null;
+  departments: { nameZh: string; nameEn: string }[];
+};
+
+const ROLE_ORDER = { presidium: 0, lead: 1 } as const;
+
+/** Everyone in the chat, for the members panel: 主席团 first, then 部长, then the rest. */
+export const members = query({
+  args: { channelId: v.id("channels") },
+  handler: async (ctx, args): Promise<ChannelMember[]> => {
+    const viewer = await requireApproved(ctx);
+    const { channel } = await requireChannelAccess(ctx, viewer, args.channelId);
+    const ids = await channelAudience(ctx, channel);
+    const people = await getUserSummaries(ctx, ids);
+    const presidium = new Set(channel.type === "dm" ? [] : await presidiumUserIds(ctx));
+    const result: ChannelMember[] = [];
+    for (const id of ids) {
+      const person = people.get(id);
+      if (!person) continue;
+      const led: { nameZh: string; nameEn: string }[] = [];
+      if (channel.type !== "dm") {
+        const rows = await ctx.db
+          .query("departmentMemberships")
+          .withIndex("by_user", (q) => q.eq("userId", id))
+          .collect();
+        for (const row of rows) {
+          if (row.role !== "lead") continue;
+          const department = await ctx.db.get("departments", row.departmentId);
+          if (department && !department.archivedAt && department.kind === "regular") {
+            led.push({ nameZh: department.nameZh, nameEn: department.nameEn });
+          }
+        }
+      }
+      const role = presidium.has(id) ? "presidium" : led.length > 0 ? "lead" : null;
+      result.push({ ...person, role, departments: role === "lead" ? led : [] });
+    }
+    const rank = (m: ChannelMember) => (m.role ? ROLE_ORDER[m.role] : 2);
+    return result.sort(
+      (a, b) => rank(a) - rank(b) || (a.nameZh || a.name || "").localeCompare(b.nameZh || b.name || "", "zh"),
+    );
+  },
+});
+
 export const watchers = query({
   args: { channelId: v.id("channels") },
   handler: async (ctx, args) => {
