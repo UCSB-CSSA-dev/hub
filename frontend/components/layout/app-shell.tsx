@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useViewer } from "@/components/auth/account-state";
 import { PushSync } from "@/components/notifications/push-sync";
 import { PersonAvatar } from "@/components/people/person-avatar";
@@ -259,11 +259,47 @@ function CountBadge({ count, className }: { count: number; className?: string })
   );
 }
 
+const NON_TEXT_INPUTS = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
+
+function takesTyping(el: Element | null) {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el instanceof HTMLTextAreaElement) return true;
+  return el instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(el.type);
+}
+
+function subscribeFocus(onChange: () => void) {
+  // Focus leaves one field before entering the next; waiting a tick keeps the bar from flashing in between.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(onChange, 0);
+  };
+  document.addEventListener("focusin", onChange);
+  document.addEventListener("focusout", later);
+  return () => {
+    clearTimeout(timer);
+    document.removeEventListener("focusin", onChange);
+    document.removeEventListener("focusout", later);
+  };
+}
+
+/** A touch keyboard is probably open: a field that takes typing has focus on a touch screen. */
+function useKeyboardOpen() {
+  return useSyncExternalStore(
+    subscribeFocus,
+    () => takesTyping(document.activeElement) && window.matchMedia("(pointer: coarse)").matches,
+    () => false,
+  );
+}
+
 function MobileNav() {
   const t = useTranslations("nav");
   const tc = useTranslations("common");
   const isActive = useIsActive();
   const { mobile, counts } = useNav();
+  const keyboardOpen = useKeyboardOpen();
+  // The bar would otherwise ride up on top of the keyboard and squeeze the page.
+  if (keyboardOpen) return null;
   return (
     <nav className="flex shrink-0 border-t border-border bg-sidebar pb-[calc(env(safe-area-inset-bottom)*1.15)] md:hidden">
       {mobile.map((item) => {

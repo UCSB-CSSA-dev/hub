@@ -45,6 +45,7 @@ const TEXT = {
     submissionReceived: "{actor} 提交了「{title}」",
     submissionApproved: "{actor} 通过了你的「{title}」",
     submissionChanges: "{actor} 请你修改「{title}」",
+    submissionCompleted: "{actor} 把你的「{title}」标记为已完成",
     assignmentComment: "{actor} 评论了「{title}」",
     docMention: "{actor} 在文档「{title}」中提到了你",
     taskMention: "{actor} 在{kind}「{title}」中提到了你",
@@ -88,6 +89,7 @@ const TEXT = {
     submissionReceived: '{actor} submitted "{title}"',
     submissionApproved: '{actor} approved your "{title}"',
     submissionChanges: '{actor} requested changes on "{title}"',
+    submissionCompleted: '{actor} marked your "{title}" as complete',
     assignmentComment: '{actor} commented on "{title}"',
     docMention: '{actor} mentioned you in "{title}"',
     taskMention: '{actor} mentioned you in the {kind} "{title}"',
@@ -105,6 +107,12 @@ const TEXT = {
 } as const;
 
 type Key = keyof (typeof TEXT)["zh"];
+
+const REVIEW_TITLE: Record<string, Key> = {
+  approve: "submissionApproved",
+  request_changes: "submissionChanges",
+  complete: "submissionCompleted",
+};
 
 function fill(template: string, values: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
@@ -194,7 +202,7 @@ export function pushText(input: PushInput, locale: PushLocale, lookup: PushLooku
       return { title: t("submissionReceived", { actor: person("actorId"), title }) };
     case "submission_reviewed":
       return {
-        title: t(params.decision === "approve" ? "submissionApproved" : "submissionChanges", { actor: person("actorId"), title }),
+        title: t(REVIEW_TITLE[String(params.decision)] ?? "submissionChanges", { actor: person("actorId"), title }),
         body: note,
       };
     case "assignment_comment":

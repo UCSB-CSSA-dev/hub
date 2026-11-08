@@ -488,6 +488,7 @@ Decisions for this stage (2026-10-22):
 - [x] Upload with progress and drag and drop; 10 MB, blocked types and quota checked on the server; image thumbnails
 - [x] Google Drive overflow: files over 10 MB (up to 500 MB) or that don't fit the quota go to the CSSA Drive through the Apps Script; link-viewable, trashed on purge
 - [x] Previews for images, PDF, video, audio
+- [x] In-app viewer dialog (PDF with selectable text) and files kept on the device, managed in Settings (#5)
 - [x] Rename, move, delete; trash with restore; daily purge cron (rejected uploads are deleted immediately, so no orphan cron)
 - [x] Share a file to a chat (link card), and save a chat attachment to Files (shared storage, cleanup checks both)
 - [x] File name search
@@ -502,6 +503,7 @@ Decisions for this stage (2026-10-22):
 - [x] 任务 page: 我的, 我发布的, 管理; task page for assignees, chat members and reviewers
 - [x] Submissions (text, files into the task's folder, link, mark done, auto-approve), late flag
 - [x] Review: approve, request changes, comment thread
+- [x] Reviewers mark an assignee complete without a submission (#9)
 - [x] Events: time, place, helpers, prep tasks
 - [x] Collaborative markdown documents on tasks and events (live editing, markdown shortcuts, .md and PDF export)
 - [x] Documents in Files folders and in department, group and DM chats; `@` mentions in documents and task descriptions (`doc_mention`, `task_mention`)
@@ -513,6 +515,7 @@ Decisions for this stage (2026-10-22):
 - [x] Apps Script relay on a dedicated Gmail account ([06-email-apps-script.md](06-email-apps-script.md))
 - [x] `emailJobs` outbox, send action, retry cron, quota skip, dry run in dev
 - [x] `daily_digest` template in zh and en: today, events in the next week, to-dos
+- [x] Digest adds tasks due in the next 7 days, unread announcements, and unread messages per chat; Settings → Notifications picks the digest language (#10)
 - [x] Hourly cron that sends at 10:00 AM Pacific, once per person per day, only when there's something to report
 - [x] Settings: "接收邮箱 / Send my digest to"
 - [x] Admin overview email card (today's sent, failed, skipped, last error)

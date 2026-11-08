@@ -25,7 +25,7 @@ Every notification below is in-app and pushed. Email is only the [daily digest](
 | Task overdue (once) | The same | `assignment_overdue` |
 | Event starts in 24 hours | Helpers | `event_soon` |
 | Submission received | Creator | `submission_received` |
-| Submission approved or changes requested | Assignee | `submission_reviewed` |
+| Submission approved, changes requested, or marked complete by a reviewer | Assignee | `submission_reviewed` (`decision`: `approve`, `request_changes`, `complete`) |
 | New comment on a submission | The other side (assignee or reviewers) | `assignment_comment` |
 | @mentioned in a document | Newly mentioned people who can open it | `doc_mention` |
 | @mentioned in a task or event description | Newly mentioned people in the chat (not those just assigned) | `task_mention` |
@@ -77,12 +77,15 @@ Standard Web Push (service worker + VAPID), so it works with a static GitHub Pag
 Sent every day, weekends included, at **10:00 AM Pacific**.
 
 - **Who gets it:** every approved, active user who has something in it. A day with nothing to report sends nothing. There's no opt-out.
-- **Where it goes:** `users.digestEmail` if set, otherwise their sign-in email. Settings → 邮件摘要 has one field, "接收邮箱 / Send my digest to", with a reset to the sign-in address. The address only has to look valid; it isn't verified.
-- **What's in it** (only the viewer's own tasks and events, open ones only):
-  1. **今天 Today** (highlighted at the top): overdue tasks, tasks due today, and events today with time and place.
-  2. **未来一周的活动 Events in the next 7 days**, after today.
-  3. **待办 To-do:** every other open task: due later, or no due date. Tasks waiting for review aren't to-dos; tasks with changes requested are.
-- Each item links to its task page. The footer says it's a daily summary and that the address can be changed in Settings.
+- **Where it goes:** `users.digestEmail` if set, otherwise their sign-in email. Settings → 通知 → 邮件摘要 has "接收邮箱 / Send my digest to", with a reset to the sign-in address. The address only has to look valid; it isn't verified.
+- **Language:** `users.digestLocale` ("摘要语言 / Summary language" in the same card, 中文 or English). Until it's set, the digest uses the app language.
+- **What's in it** (only the viewer's own tasks, events and chats):
+  1. **未读公告 Unread announcements** (highlighted): announcements in the org and department chats the viewer hasn't acknowledged, newest first, with chat, author and time. They ignore mute, like in the app.
+  2. **今天 Today** (highlighted): overdue tasks, tasks due today, and events today with time and place.
+  3. **未来一周 Next 7 days:** events and tasks due after today and within 7 days, in time order.
+  4. **其他待办 Other to-dos:** every other open task: due later, or no due date. Tasks waiting for review aren't to-dos; tasks with changes requested are.
+  5. **未读消息 Unread messages:** each chat in the viewer's chat list with unread messages from others (the same count as the app), most recent chat first, with its newest 5 messages as "sender: text" (mentions shown as names, attachments, forwards, task and doc cards as labels). Muted chats come last and show only the count. At most 20 chats; announcements aren't repeated here.
+- Each task links to its task page and each chat to the chat. The footer says it's a daily summary and that the address and language can be changed in Settings → Notifications.
 - Rendered on the Convex side in `convex/lib/emailTemplates.ts` (template `daily_digest`, zh and en). The Apps Script stays a thin relay. Escape every user-provided value.
 
 ### Pipeline
@@ -102,8 +105,9 @@ The admin overview has an email card: today's digest counts (sent, failed, skipp
 - [ ] With push on, a mention or DM shows a system notification on a closed desktop browser, an Android phone, and an iPhone home-screen app; tapping it opens the right chat.
 - [ ] After signing out on a device, that device stops getting pushes.
 - [ ] Notifications render in the viewer's current language.
-- [ ] At 10:00 AM Pacific, everyone with open tasks or upcoming events gets exactly one digest; people with nothing get none.
-- [ ] The digest puts today's tasks and events first, then the next week's events, then all other to-dos.
+- [ ] At 10:00 AM Pacific, everyone with open tasks, upcoming events, or unread messages gets exactly one digest; people with nothing get none.
+- [ ] The digest puts unread announcements and today's tasks and events first, then the next 7 days' events and tasks, then other to-dos, then unread messages per chat.
+- [ ] The digest arrives in the language chosen in Settings → Notifications.
 - [ ] A digest goes to the address set in Settings when there is one.
 - [ ] Failed emails retry up to 5 times with backoff and never send duplicates.
 - [ ] A quota error skips the rest of the day's digests instead of retrying in a loop.

@@ -40,6 +40,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UserSummaryLike } from "@/components/people/types";
 import { api } from "@/lib/api";
+import { useEnterSubmit } from "@/lib/keyboard";
 import type { Locale } from "@/lib/locale-store";
 import { cn } from "@/lib/utils";
 import { docExtensions, looksLikeMarkdown } from "./extensions";
@@ -244,6 +245,7 @@ function LinkDialog({ editor, open, onClose }: { editor: Editor; open: boolean; 
     else chain.setLink({ href: /^(https?:|mailto:)/i.test(href) ? href : `https://${href}` }).run();
     onClose();
   };
+  const enter = useEnterSubmit(apply);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -256,7 +258,7 @@ function LinkDialog({ editor, open, onClose }: { editor: Editor; open: boolean; 
           value={url}
           placeholder="https://"
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && apply()}
+          {...enter}
         />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

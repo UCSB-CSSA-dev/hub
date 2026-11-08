@@ -27,6 +27,7 @@ import { Suspense, useEffect, useRef, useState, type DragEvent, type ReactNode }
 import { toast } from "sonner";
 import { UsageBar } from "@/components/admin/storage-card";
 import { NewDocumentDialog } from "@/components/docs/task-documents";
+import { downloadFile } from "@/lib/file-cache";
 import { formatBytes } from "@/lib/format";
 import { FileTypeIcon } from "@/components/files/file-icon";
 import {
@@ -567,6 +568,7 @@ function FileRow({
   const locale = useLocale() as Locale;
   const format = useFormatter();
   const tDocs = useTranslations("docs");
+  const showError = useErrorToast();
   const meta = [
     file.documentId ? tDocs("document") : formatBytes(file.size),
     file.uploadedBy ? displayName(file.uploadedBy, locale) : null,
@@ -596,7 +598,18 @@ function FileRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {file.url ? (
+          {file.url && !file.drive ? (
+            <DropdownMenuItem
+              onSelect={() =>
+                void downloadFile({ url: file.url!, name: file.name, contentType: file.contentType, size: file.size }).catch(
+                  showError,
+                )
+              }
+            >
+              <DownloadIcon />
+              {t("download")}
+            </DropdownMenuItem>
+          ) : file.url ? (
             <DropdownMenuItem asChild>
               <a href={file.url} target="_blank" rel="noopener noreferrer" download={file.name}>
                 <DownloadIcon />

@@ -96,6 +96,7 @@ export const viewer = query({
       _id: user._id,
       email: user.email,
       digestEmail: user.digestEmail,
+      digestLocale: user.digestLocale,
       name: user.name,
       image: user.avatarUrl ?? user.image,
       hasCustomAvatar: user.avatarStorageId !== undefined,
@@ -296,6 +297,14 @@ export const setDigestEmail = mutation({
       throw appError("INVALID", "email");
     }
     await ctx.db.patch("users", user._id, { digestEmail: email === user.email ? undefined : email });
+  },
+});
+
+export const setDigestLocale = mutation({
+  args: { locale: v.union(v.literal("zh"), v.literal("en")) },
+  handler: async (ctx, args) => {
+    const { user } = await requireApproved(ctx);
+    await ctx.db.patch("users", user._id, { digestLocale: args.locale });
   },
 });
 

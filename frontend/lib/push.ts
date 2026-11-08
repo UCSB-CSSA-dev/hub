@@ -2,6 +2,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
 import { useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
+import { clearCache } from "@/lib/file-cache";
 
 /** Per device: set once this browser has a push subscription saved for the signed-in user. */
 const STORAGE_KEY = "cssa-hub-push";
@@ -153,6 +154,8 @@ export function useSignOut() {
   const remove = useMutation(api.push.unsubscribe);
   return async () => {
     await unsubscribeDevice(remove).catch(() => {});
+    // Kept files belong to this account; the next person on the device shouldn't find them.
+    await clearCache().catch(() => {});
     await signOut();
   };
 }

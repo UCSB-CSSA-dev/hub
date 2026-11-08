@@ -9,13 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Segmented } from "@/components/ui/segmented";
 import { api, LIMITS } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
+import type { Locale } from "@/lib/locale-store";
+import { SettingRow } from "./setting-row";
 
 export function DigestEmailCard() {
   const t = useTranslations("settings");
   const viewer = useViewer();
   const setDigestEmail = useMutation(api.users.setDigestEmail);
+  const setDigestLocale = useMutation(api.users.setDigestLocale);
   const showError = useErrorToast();
   const [email, setEmail] = useState(viewer.digestEmail ?? "");
   const [busy, setBusy] = useState(false);
@@ -46,7 +50,7 @@ export function DigestEmailCard() {
         <CardTitle>{t("digestTitle")}</CardTitle>
         <CardDescription>{t("digestBody")}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
         <form onSubmit={onSubmit} className="flex flex-col gap-2">
           <Label htmlFor="digest-email">{t("digestAddress")}</Label>
           <div className="flex gap-2">
@@ -74,6 +78,21 @@ export function DigestEmailCard() {
             ) : null}
           </p>
         </form>
+        <SettingRow label={t("digestLanguage")} className="border-t border-border pt-4">
+          <Segmented
+            label={t("digestLanguage")}
+            value={viewer.digestLocale ?? viewer.locale}
+            onChange={(locale: Locale) =>
+              void setDigestLocale({ locale })
+                .then(() => toast.success(t("digestSaved")))
+                .catch(showError)
+            }
+            options={[
+              { value: "zh", label: "中文" },
+              { value: "en", label: "English" },
+            ]}
+          />
+        </SettingRow>
       </CardContent>
     </Card>
   );

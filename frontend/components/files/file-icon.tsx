@@ -43,11 +43,12 @@ export function FileTypeIcon({
   return <Icon className={cn("size-5 shrink-0 text-muted-foreground", className)} />;
 }
 
-/** Files the browser can show inline in the preview dialog. */
-export function previewKind(contentType: string): "image" | "pdf" | "video" | "audio" | null {
+/** Files the viewer can show inline. */
+export function previewKind(contentType: string): "image" | "pdf" | "video" | "audio" | "text" | null {
   if (contentType.startsWith("image/")) return "image";
   if (contentType === "application/pdf") return "pdf";
   if (contentType.startsWith("video/")) return "video";
   if (contentType.startsWith("audio/")) return "audio";
+  if (contentType.startsWith("text/") || contentType === "application/json") return "text";
   return null;
 }

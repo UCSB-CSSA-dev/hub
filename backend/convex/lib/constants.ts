@@ -103,6 +103,10 @@ export const LIMITS = {
   digestHour: 10,
   digestEventDays: 7,
   digestItems: 30,
+  /** Chats with unread messages listed in the digest, and the newest messages shown per chat. */
+  digestChats: 20,
+  digestChatMessages: 5,
+  digestMessageChars: 200,
   digestEmail: 254,
   emailAttempts: 5,
 } as const;

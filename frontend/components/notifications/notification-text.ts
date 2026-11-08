@@ -6,6 +6,12 @@ import { displayName, localized } from "@/lib/names";
 
 export type Notification = FunctionReturnType<typeof api.notifications.listMine>["page"][number];
 
+const REVIEW_TITLE: Record<string, "submissionApproved" | "submissionChanges" | "submissionCompleted"> = {
+  approve: "submissionApproved",
+  request_changes: "submissionChanges",
+  complete: "submissionCompleted",
+};
+
 /** Title and optional detail line for a notification, built from its type and params. */
 export function useNotificationText() {
   const t = useTranslations("notifications");
@@ -84,7 +90,7 @@ export function useNotificationText() {
         return { title: t("submissionReceived", { actor: person("actorId"), title }) };
       case "submission_reviewed":
         return {
-          title: t(params.decision === "approve" ? "submissionApproved" : "submissionChanges", { actor: person("actorId"), title }),
+          title: t(REVIEW_TITLE[String(params.decision)] ?? "submissionChanges", { actor: person("actorId"), title }),
           detail: note,
         };
       case "assignment_comment":

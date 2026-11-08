@@ -139,7 +139,7 @@ Chinese text needs slightly more line height than English. Keep `leading-relaxed
 
 - Desktop (1024px and up): fixed left sidebar, 240px wide, collapsible to icons (64px). Chat adds a second column for the channel list (280px).
 - Tablet (768 to 1023px): sidebar collapsed to icons by default. Chat shows the channel list and the conversation as separate screens, with a back arrow in the conversation header.
-- Mobile (under 768px): bottom tab bar with Chat, Files, Tasks, Notices, More. List and detail views become separate screens.
+- Mobile (under 768px): bottom tab bar with Chat, Files, Tasks, Notices, More. List and detail views become separate screens. The tab bar stays at the bottom of the screen and hides while a text field has focus on a touch screen, so it never rides up on top of the keyboard.
 - Safe areas: the viewport uses `viewport-fit=cover`, so anything that touches a screen edge pads itself with `env(safe-area-inset-*)`. That covers the iPhone home indicator, the notch in landscape, and the iOS home-screen app. The app shell pads the top and sides; the bottom tab bar, the sidebar footer, the main column on tablets and every sheet pad the bottom. The tab bar gets 15% extra so its labels sit clearly above the home indicator.
 - Active nav item: gold text and a 2px gold left border, no filled background.
 - The language toggle (中 / EN) and the user menu sit at the bottom of the sidebar.

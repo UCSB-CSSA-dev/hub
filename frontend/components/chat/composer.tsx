@@ -47,6 +47,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { api, LIMITS, mentionToken, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
 import { thumbnail, uploadBlob } from "@/lib/image";
+import { isImeEnter, useEnterSubmit } from "@/lib/keyboard";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
 import { cn } from "@/lib/utils";
@@ -234,6 +235,7 @@ function Editor({ name }: { name: string }) {
   };
 
   const cancelEdit = () => setEditing(null);
+  const enter = useEnterSubmit(() => void submit());
 
   const updateMentionQuery = (text: string, caret: number) => {
     const match = /(?:^|\s)@([^\s@]{0,20})$/.exec(text.slice(0, caret));
@@ -267,7 +269,7 @@ function Editor({ name }: { name: string }) {
         setMentionIndex((i) => (i + delta + candidates.length) % candidates.length);
         return;
       }
-      if ((event.key === "Enter" || event.key === "Tab") && !event.nativeEvent.isComposing) {
+      if ((event.key === "Enter" || event.key === "Tab") && !isImeEnter(event.nativeEvent)) {
         event.preventDefault();
         pickMention(candidates[mentionIndex]);
         return;
@@ -282,11 +284,7 @@ function Editor({ name }: { name: string }) {
       else if (replyTo) setReplyTo(null);
       return;
     }
-    // isComposing: Enter confirms a Chinese IME candidate, it must not send.
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void submit();
-    }
+    enter.onKeyDown(event);
   };
 
   const addFiles = (files: File[]) => {
@@ -534,6 +532,7 @@ function Editor({ name }: { name: string }) {
             updateMentionQuery(e.target.value, e.target.selectionStart);
           }}
           onKeyDown={onKeyDown}
+          onKeyUp={enter.onKeyUp}
           onPaste={onPaste}
           onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
           placeholder={placeholder}

@@ -1,14 +1,15 @@
 "use client";
 
-import { BellIcon, BellOffIcon, ShareIcon, SmartphoneIcon, SquarePlusIcon } from "lucide-react";
+import { ShareIcon, SmartphoneIcon, SquarePlusIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { usePush } from "@/lib/push";
+import { SettingRow } from "./setting-row";
 
 /** Turns push on for this device and sends a test notification; call straight from a tap. */
 export function useEnablePush() {
@@ -63,23 +64,17 @@ export function PushNotificationsCard() {
         {guideButton(false)}
       </>
     );
-  } else if (push.state === "on") {
-    body = (
-      <>
-        <Button variant="secondary" onClick={() => void push.disable()}>
-          <BellOffIcon />
-          {t("pushDisable")}
-        </Button>
-        {guideButton(false)}
-      </>
-    );
   } else {
     body = (
       <>
-        <Button onClick={() => void enable()} disabled={busy || push.configured === undefined}>
-          <BellIcon />
-          {t("pushEnable")}
-        </Button>
+        <SettingRow label={t("pushThisDevice")} htmlFor="push-switch" className="w-full">
+          <Switch
+            id="push-switch"
+            checked={push.state === "on"}
+            disabled={busy || push.configured === undefined}
+            onCheckedChange={(on) => void (on ? enable() : push.disable())}
+          />
+        </SettingRow>
         {guideButton(false)}
       </>
     );
@@ -88,10 +83,7 @@ export function PushNotificationsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {t("push")}
-          {push.state === "on" ? <Badge variant="secondary">{t("pushOn")}</Badge> : null}
-        </CardTitle>
+        <CardTitle>{t("push")}</CardTitle>
         <CardDescription>{t("pushHint")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2">{body}</CardContent>

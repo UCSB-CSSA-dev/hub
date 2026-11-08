@@ -109,7 +109,7 @@ Use a separate Apps Script deployment (or at least a separate secret) for dev an
 | Free Gmail | 100 |
 | Google Workspace | 1,500 |
 
-Each address in `to` and `bcc` counts. The Hub sends at most one email per person per day, only to people with open tasks or upcoming events, so a free account lasts until about 90 such people on the same day. Past that, the rest of the day's digests are skipped (see [the pipeline](features/notifications-and-email.md#pipeline)). Check the current limits in Google's documentation before launch.
+Each address in `to` and `bcc` counts. The Hub sends at most one email per person per day, only to people with open tasks, upcoming events, or unread messages, so a free account lasts until about 90 such people on the same day. Past that, the rest of the day's digests are skipped (see [the pipeline](features/notifications-and-email.md#pipeline)). Check the current limits in Google's documentation before launch.
 
 ## Templates
 
@@ -117,6 +117,6 @@ Rendered in `convex/lib/emailTemplates.ts`, with a `zh` and an `en` version, eac
 
 | Template | Params | Subject (zh / en) |
 | --- | --- | --- |
-| `daily_digest` | `today[]`, `events[]`, `todos[]` | 【CSSA Hub】今日待办：{n} 项 / Today: {n} items, or 【CSSA Hub】每日摘要 / Daily summary when nothing is due today |
+| `daily_digest` | `today[]`, `week[]`, `todos[]`, `announcements[]`, `chats[]` | 【CSSA Hub】今日待办：{n} 项 / Today: {n} items, or 【CSSA Hub】每日摘要 / Daily summary when nothing is due today |
 
 Each item has a title, chat name, kind (任务 / 活动), due date or time and place, and a link. Escape all user-provided values when building HTML.

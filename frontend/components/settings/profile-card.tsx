@@ -10,13 +10,14 @@ import { useViewer } from "@/components/auth/account-state";
 import { PersonAvatar } from "@/components/people/person-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { api, LIMITS, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
 import { squareImage } from "@/lib/image";
+import { SettingRow } from "./setting-row";
 
 export function ProfileCard() {
   const t = useTranslations();
@@ -164,19 +165,18 @@ export function ProfileCard() {
           </Button>
         </form>
 
-        <label className="flex items-start gap-2 border-t border-border pt-4 text-sm">
-          <Checkbox
+        <SettingRow
+          label={t("settings.showEmailPublicly")}
+          hint={t("settings.showEmailPubliclyHint", { email: viewer.email ?? "" })}
+          htmlFor="show-email"
+          className="border-t border-border pt-4"
+        >
+          <Switch
+            id="show-email"
             checked={viewer.showEmailPublicly}
-            onCheckedChange={(v) => void setShowEmail({ show: v === true }).catch(showError)}
-            className="mt-0.5"
+            onCheckedChange={(show) => void setShowEmail({ show }).catch(showError)}
           />
-          <span>
-            {t("settings.showEmailPublicly")}
-            <span className="block text-xs text-muted-foreground">
-              {t("settings.showEmailPubliclyHint", { email: viewer.email ?? "" })}
-            </span>
-          </span>
-        </label>
+        </SettingRow>
       </CardContent>
     </Card>
   );
