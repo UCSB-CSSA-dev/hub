@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// GitHub Pages serves the site from /<repo>, e.g. /canvas. Leave empty for local dev.
+// GitHub Pages serves the site from /<repo>, e.g. /hub. Leave empty for local dev.
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 /** Local dev fallback: the URL `npx convex dev` wrote to backend/.env.local. */

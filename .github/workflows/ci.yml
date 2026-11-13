@@ -49,4 +49,4 @@ jobs:
         env:
           # Placeholder: the build only needs a syntactically valid URL.
           NEXT_PUBLIC_CONVEX_URL: https://placeholder-123.convex.cloud
-          NEXT_PUBLIC_BASE_PATH: /canvas
+          NEXT_PUBLIC_BASE_PATH: /hub
