@@ -44,7 +44,7 @@ flowchart LR
 
 ### Route map
 
-URLs have no locale segment; the language is a client-side setting (see [05-i18n.md](05-i18n.md)). Routes end with a trailing slash (`trailingSlash: true`) and are served under the base path (`/canvas` on GitHub Pages). Record IDs go in query parameters because a static export cannot prerender dynamic segments.
+URLs have no locale segment; the language is a client-side setting (see [05-i18n.md](05-i18n.md)). Routes end with a trailing slash (`trailingSlash: true`) and are served under the base path (`/hub` on GitHub Pages). Record IDs go in query parameters because a static export cannot prerender dynamic segments.
 
 "Admin" means system admin or presidium (see [02-roles-and-permissions.md](02-roles-and-permissions.md#roles)).
 
@@ -182,7 +182,7 @@ A Convex cron runs hourly. It finds assignments due in the next 24 hours where a
 
 | Piece | Where |
 | --- | --- |
-| Next.js | Static export on GitHub Pages: `https://ucsb-cssa-dev.github.io/canvas/` |
+| Next.js | Static export on GitHub Pages: `https://ucsb-cssa-dev.github.io/hub/` |
 | Convex | Convex Cloud (dev and prod deployments) |
 | Apps Script | Deployed as a web app under the CSSA Google account (Stage 3) |
 

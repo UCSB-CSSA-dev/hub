@@ -169,13 +169,13 @@ The **first account to sign in becomes system admin**. In production, set `BOOTS
 
 ## Deployment (GitHub Pages + Convex)
 
-Pushing to `stable` runs `.github/workflows/deploy.yml`: CI checks, then `npx convex deploy` (pushes schema and functions to the production deployment), then a static build of the frontend pointed at that deployment, published to `https://ucsb-cssa-dev.github.io/canvas/`.
+Pushing to `stable` runs `.github/workflows/deploy.yml`: CI checks, then `npx convex deploy` (pushes schema and functions to the production deployment), then a static build of the frontend pointed at that deployment, published to `https://ucsb-cssa-dev.github.io/hub/`.
 
 One-time setup:
 
 1. **GitHub Pages:** repo Settings > Pages > Source: **GitHub Actions**.
 2. **Secret `CONVEX_DEPLOY_KEY`:** Convex dashboard > production deployment > Settings > Deploy keys > generate a production key, then add it under repo Settings > Secrets and variables > Actions.
-3. **Production Convex environment variables** (`npx convex env set --prod ...` from `backend/`, or the dashboard): `SITE_URL=https://ucsb-cssa-dev.github.io/canvas` (include the base path, no trailing slash), `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `JWT_PRIVATE_KEY` and `JWKS` (run `npx @convex-dev/auth --prod`), `BOOTSTRAP_ADMIN_EMAIL`, the push notification keys `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (generate a pair with `npx web-push generate-vapid-keys` in `backend/`; use a different pair than dev), and for 小飒 `AI_API_KEY` (`npm run ai:env --workspace backend -- --prod` copies it from the root `.env`).
+3. **Production Convex environment variables** (`npx convex env set --prod ...` from `backend/`, or the dashboard): `SITE_URL=https://ucsb-cssa-dev.github.io/hub` (include the base path, no trailing slash), `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `JWT_PRIVATE_KEY` and `JWKS` (run `npx @convex-dev/auth --prod`), `BOOTSTRAP_ADMIN_EMAIL`, the push notification keys `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (generate a pair with `npx web-push generate-vapid-keys` in `backend/`; use a different pair than dev), and for 小飒 `AI_API_KEY` (`npm run ai:env --workspace backend -- --prod` copies it from the root `.env`).
 4. **Google OAuth:** add the production `https://<prod-deployment>.convex.site/api/auth/callback/google` redirect URI.
 
-The base path (`/canvas`) comes from `actions/configure-pages`, so it follows the repository name, and is empty if a custom domain is configured.
+The base path (`/hub`) comes from `actions/configure-pages`, so it follows the repository name, and is empty if a custom domain is configured.

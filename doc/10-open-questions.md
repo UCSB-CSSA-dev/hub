@@ -48,7 +48,7 @@ What happens to messages, files, and assignments when a school year ends?
 
 Hosting is decided (GitHub Pages static export + Convex Cloud, see Decided below).
 
-- **Default:** `https://ucsb-cssa-dev.github.io/canvas/`, Convex free tier.
+- **Default:** `https://ucsb-cssa-dev.github.io/hub/`, Convex free tier.
 - Needed: whether CSSA wants a custom domain, and who owns the GitHub organization and Convex team for continuity across officer terms.
 
 ## Accounts and roster (added with Stage 1)
@@ -94,7 +94,7 @@ Record decisions here as `YYYY-MM-DD - Qn - decision - where documented`.
 - 2026-10-19 - System admin - the first account becomes system admin with full access (optional `BOOTSTRAP_ADMIN_EMAIL` lock) - [accounts-and-onboarding.md](features/accounts-and-onboarding.md#first-account-becomes-system-admin)
 - 2026-10-19 - Pre-approvals - admins and leads pre-approve emails into the hierarchy; those users skip the approval queue on first sign-in - [roster.md](features/roster.md#pre-approving-emails)
 - 2026-10-19 - Roster - every approved user can see the full hierarchy - [roster.md](features/roster.md)
-- 2026-10-19 - Q12 - Hosting: frontend as a Next.js static export on GitHub Pages (`UCSB-CSSA-dev/canvas`), deployed with Convex by GitHub Actions; code split into `frontend/` and `backend/` workspaces - [01-architecture.md](01-architecture.md#deployment)
+- 2026-10-19 - Q12 - Hosting: frontend as a Next.js static export on GitHub Pages (`UCSB-CSSA-dev/hub`), deployed with Convex by GitHub Actions; code split into `frontend/` and `backend/` workspaces - [01-architecture.md](01-architecture.md#deployment)
 - 2026-10-19 - Chat access - department channel access is derived from `departmentMemberships`; `channelMembers` holds DM membership and read state only - [03-data-model.md](03-data-model.md#channels-and-channelmembers)
 - 2026-10-20 - Q4 - no per-view notice; every monitored chat shows an icon (top right) whose tooltip lists who can view it, and existing users re-accept the updated notice - [09-roadmap.md](09-roadmap.md#stage-2-full-chat-and-oversight-完整聊天与监督)
 - 2026-10-20 - Q5 - authors can't delete; they can recall within 5 minutes (content erased, "{name} 撤回了一条消息" kept) and edit with a public edit history; 主席团 can remove any message (content erased, audit logged) - [09-roadmap.md](09-roadmap.md#stage-2-full-chat-and-oversight-完整聊天与监督)

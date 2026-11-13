@@ -16,7 +16,7 @@ async function team(t: TestConvex) {
 function fakeRelay(size = 20 * MB) {
   process.env.APPS_SCRIPT_URL = "https://script.example/exec";
   process.env.APPS_SCRIPT_SHARED_SECRET = "secret";
-  process.env.SITE_URL = "https://ucsb-cssa-dev.github.io/canvas";
+  process.env.SITE_URL = "https://ucsb-cssa-dev.github.io/hub";
   const calls: Record<string, unknown>[] = [];
   vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
     const body = JSON.parse(init.body) as Record<string, unknown>;
