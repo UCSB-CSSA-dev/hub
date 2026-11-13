@@ -25,6 +25,8 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { AiDocumentChips, AiMessageContent, aiBusy, aiIsCard } from "@/components/ai/ai-message";
+import { SasaAvatar } from "@/components/ai/sasa-avatar";
 import { useViewer } from "@/components/auth/account-state";
 import { PersonAvatar } from "@/components/people/person-avatar";
 import { Button } from "@/components/ui/button";
@@ -221,10 +223,11 @@ function MessageRow({ message, grouped, highlighted }: { message: Message; group
   const [sheetOpenedAt, setSheetOpenedAt] = useState<number | null>(null);
   const author = personById(message.people, message.authorId);
   const time = format.dateTime(message._creationTime, { hour: "numeric", minute: "2-digit" });
-  const card = message.kind === "task" || message.kind === "doc";
+  const card = message.kind === "task" || message.kind === "doc" || aiIsCard(message);
   const selectable = message.state === "normal" && !card;
   const isSelected = selected.has(message._id);
-  const hasActions = !selecting && message.state === "normal";
+  const hasActions = !selecting && message.state === "normal" && !aiBusy(message);
+  const sasa = message.kind === "ai";
   const longPress = useLongPress(() => setSheetOpenedAt(Date.now()));
 
   return (
@@ -254,6 +257,8 @@ function MessageRow({ message, grouped, highlighted }: { message: Message; group
         <span className="w-8 shrink-0 pt-0.5 text-right text-[10px] text-transparent group-hover:text-subtle-foreground">
           {time}
         </span>
+      ) : sasa ? (
+        <SasaAvatar state={aiBusy(message) ? "think" : "idle"} className="mt-0.5" />
       ) : (
         <PersonAvatar person={author} className="mt-0.5" />
       )}
@@ -261,8 +266,13 @@ function MessageRow({ message, grouped, highlighted }: { message: Message; group
         {grouped ? null : (
           <div className="flex items-baseline gap-2">
             <span className={cn("text-sm font-medium", author?.status === "deactivated" && "text-muted-foreground line-through")}>
-              {author ? displayName(author, locale) : t("unknownUser")}
+              {sasa ? t("sasa") : author ? displayName(author, locale) : t("unknownUser")}
             </span>
+            {sasa ? (
+              <span className="self-center rounded-sm bg-primary/15 px-1.5 text-[11px] leading-4.5 font-medium text-primary">
+                {t("aiTag")}
+              </span>
+            ) : null}
             {message.announcement && message.state === "normal" ? (
               <span className="flex items-center gap-1 self-center rounded-sm bg-warning/15 px-1.5 text-[11px] leading-4.5 font-medium text-warning">
                 <MegaphoneIcon className="size-3" />
@@ -347,7 +357,12 @@ function MessageContent({ message }: { message: Message }) {
       {message.replyTo ? <ReplyQuote message={message} /> : null}
       {message.kind === "task" ? <TaskCardView task={message.task ?? null} /> : null}
       {message.kind === "doc" ? <DocCardView doc={message.doc ?? null} /> : null}
-      {message.body ? <Markdown body={message.body} people={message.people} /> : null}
+      {message.kind === "ai" ? (
+        <AiMessageContent message={message} />
+      ) : message.body ? (
+        <Markdown body={message.body} people={message.people} />
+      ) : null}
+      <AiDocumentChips message={message} />
       {message.forward ? <ForwardCard forward={message.forward} people={message.people} /> : null}
       <AttachmentList attachments={message.attachments} />
       <SharedFileList files={message.files} />
@@ -484,10 +499,11 @@ function MessageActions({
   const isMember = channel.access.via === "member";
   const own = message.authorId === viewer._id;
   const canReact = isMember && channel.access.canInteract;
-  const canReply = isMember && channel.access.canPost;
+  const canReply = isMember && channel.access.canPost && channel.type !== "assistant";
   const canEdit = own && isMember && channel.access.canInteract && message.kind === "user";
   const canRecall = own && isMember && channel.access.canInteract && now - message._creationTime < LIMITS.recallWindowMs;
-  const card = message.kind === "task" || message.kind === "doc";
+  const card = message.kind === "task" || message.kind === "doc" || aiIsCard(message);
+  const canForward = isMember && !card;
 
   const copy = async () => {
     const text = message.body ? preview(message.body, message.people, 100_000) : "";
@@ -528,7 +544,7 @@ function MessageActions({
                 {t("recall")}
               </DropdownMenuItem>
             ) : null}
-            {isMember && !card ? (
+            {canForward ? (
               <DropdownMenuItem onSelect={() => forward([message._id])}>
                 <ForwardIcon />
                 {t("forward")}
@@ -596,7 +612,7 @@ function MessageActions({
                 {t("recall")}
               </SheetAction>
             ) : null}
-            {isMember && !card ? (
+            {canForward ? (
               <SheetAction icon={<ForwardIcon />} onClick={sheetAction(() => forward([message._id]))}>
                 {t("forward")}
               </SheetAction>

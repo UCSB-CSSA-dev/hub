@@ -12,6 +12,7 @@
 | Audit log 审计日志 | `/admin/audit` | 2 | Yes | No |
 | Department archive | Roster card menu | 2 | Yes | No |
 | Oversight shortcuts | Roster person drawer | 2 | Yes | For members they oversee |
+| 小飒 appeals and usage | `/admin/ai` | 4 | System admins only | No |
 | Yearly handover 换届 | `/admin/handover` | 5 | Yes | No |
 
 Non-admins never see the Admin link, and every admin function re-checks permissions on the server.

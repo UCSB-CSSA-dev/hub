@@ -1,8 +1,9 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { PUBLIC_SPACE } from "./constants";
+import { canActOnSuggestion } from "./ai/suggestions";
+import { LIMITS, PUBLIC_SPACE } from "./constants";
 import { messageState, type MessageState } from "./messages";
-import { buildViewerContext } from "./permissions";
+import { buildViewerContext, type ViewerContext } from "./permissions";
 import { eventEnd } from "./tasks";
 import { MENTION_PATTERN } from "./text";
 import { getUserSummaries, type UserSummary } from "./users";
@@ -87,10 +88,36 @@ export type TaskCardView = {
 
 export type DocCardView = { _id: Id<"documents">; title: string; updatedAt: number };
 
+export type AiSuggestionView = {
+  _id: Id<"aiSuggestions">;
+  action: Doc<"aiSuggestions">["action"];
+  status: Doc<"aiSuggestions">["status"];
+  assignmentId?: Id<"assignments">;
+  /** Edits: the task's current title. */
+  assignmentTitle?: string;
+  fields: Doc<"aiSuggestions">["fields"];
+  canAct: boolean;
+};
+
+export type AiView = {
+  status: NonNullable<Doc<"messages">["ai"]>["status"];
+  /** A fixed notice rendered from translations ("welcome", "appeal_denied"). */
+  notice?: string;
+  requestId?: Id<"aiRequests">;
+  /** Who asked the question this message answers. */
+  askerId?: Id<"users">;
+  /** Announcements 小飒 posted for someone (from a document summary). */
+  actorId?: Id<"users">;
+  /** Refusals: the appeal state, and whether the viewer (the asker) can still appeal. */
+  appeal?: { status: "none" | Doc<"aiAppeals">["status"]; canAppeal: boolean };
+  /** Suggestion cards; null when the suggestion was cleaned up. */
+  suggestion?: AiSuggestionView | null;
+};
+
 export type MessageView = {
   _id: Id<"messages">;
   _creationTime: number;
-  kind: "user" | "system" | "forward" | "task" | "doc";
+  kind: "user" | "system" | "forward" | "task" | "doc" | "ai";
   authorId: Id<"users">;
   body: string;
   state: MessageState;
@@ -107,6 +134,10 @@ export type MessageView = {
   task?: TaskCardView | null;
   /** kind "doc": the chat document; null when it was deleted. */
   doc?: DocCardView | null;
+  /** kind "ai": 小飒's message state. */
+  ai?: AiView;
+  /** Documents attached to a question for 小飒. */
+  aiDocuments?: DocCardView[];
   /** Every user referenced by this message (author, mentions, reactions, system params, forwards). */
   people: UserSummary[];
   /** Departments referenced by system params. */
@@ -236,19 +267,70 @@ async function docCard(ctx: QueryCtx, documentId: Id<"documents">): Promise<DocC
   return doc ? { _id: doc._id, title: doc.title, updatedAt: doc.updatedAt } : null;
 }
 
+async function aiView(
+  ctx: QueryCtx,
+  viewerId: Id<"users">,
+  viewer: () => Promise<ViewerContext | null>,
+  message: Doc<"messages">,
+): Promise<AiView | undefined> {
+  if (message.kind !== "ai" || !message.ai) return undefined;
+  const view: AiView = {
+    status: message.ai.status,
+    notice: message.ai.notice,
+    requestId: message.ai.requestId,
+    actorId: message.ai.actorId,
+  };
+  const request = message.ai.requestId ? await ctx.db.get("aiRequests", message.ai.requestId) : null;
+  if (request) view.askerId = request.userId;
+  if (message.ai.status === "refused" && request) {
+    const appeal = await ctx.db
+      .query("aiAppeals")
+      .withIndex("by_request", (q) => q.eq("requestId", request._id))
+      .first();
+    view.appeal = {
+      status: appeal?.status ?? "none",
+      canAppeal:
+        !appeal &&
+        request.userId === viewerId &&
+        request.status === "refused" &&
+        Date.now() - request._creationTime <= LIMITS.aiAppealWindowMs,
+    };
+  }
+  if (message.ai.suggestionId) {
+    const suggestion = await ctx.db.get("aiSuggestions", message.ai.suggestionId);
+    if (!suggestion) {
+      view.suggestion = null;
+    } else {
+      const assignment = suggestion.assignmentId ? await ctx.db.get("assignments", suggestion.assignmentId) : null;
+      const context = await viewer();
+      view.suggestion = {
+        _id: suggestion._id,
+        action: suggestion.action,
+        status: suggestion.status,
+        assignmentId: suggestion.assignmentId,
+        assignmentTitle: assignment?.title,
+        fields: suggestion.fields,
+        canAct: context ? await canActOnSuggestion(ctx, context, suggestion) : false,
+      };
+    }
+  }
+  return view;
+}
+
 export async function toMessageViews(
   ctx: QueryCtx,
   viewerId: Id<"users">,
   messages: Doc<"messages">[],
 ): Promise<MessageView[]> {
-  let adminCache: boolean | null = null;
-  const isAdmin = async () => {
-    if (adminCache === null) {
+  let viewerCache: ViewerContext | null | undefined;
+  const viewer = async () => {
+    if (viewerCache === undefined) {
       const user = await ctx.db.get("users", viewerId);
-      adminCache = user ? (await buildViewerContext(ctx, user)).isAdmin : false;
+      viewerCache = user ? await buildViewerContext(ctx, user) : null;
     }
-    return adminCache;
+    return viewerCache;
   };
+  const isAdmin = async () => (await viewer())?.isAdmin ?? false;
   const views: MessageView[] = [];
   for (const message of messages) {
     const people = new Set<string>([message.authorId]);
@@ -306,6 +388,18 @@ export async function toMessageViews(
       }
     }
 
+    const ai = state === "normal" ? await aiView(ctx, viewerId, viewer, message) : undefined;
+    if (ai?.askerId) people.add(ai.askerId);
+    if (ai?.actorId) people.add(ai.actorId);
+    for (const id of ai?.suggestion?.fields.assigneeIds ?? []) people.add(id);
+    const aiDocuments: DocCardView[] = [];
+    if (state === "normal") {
+      for (const id of message.aiDocumentIds ?? []) {
+        const card = await docCard(ctx, id);
+        if (card) aiDocuments.push(card);
+      }
+    }
+
     const forward =
       message.forward && state === "normal"
         ? await forwardView(ctx, message.forward as ForwardSnapshot, people)
@@ -337,6 +431,8 @@ export async function toMessageViews(
       files: state === "normal" ? await sharedFileViews(ctx, message.fileIds ?? [], isAdmin) : [],
       task: message.assignmentId ? await taskCard(ctx, message.assignmentId, viewerId) : undefined,
       doc: message.documentId ? await docCard(ctx, message.documentId) : undefined,
+      ai,
+      aiDocuments: aiDocuments.length > 0 ? aiDocuments : undefined,
       people: [...summaries.values()],
       departments,
     });

@@ -133,6 +133,12 @@ export function GroupInfoSheet({
                   <p className="text-sm">
                     {info.presidium.map((p) => displayName(p, locale)).join(locale === "zh" ? "、" : ", ")}
                   </p>
+                  {info.systemAdmins.length > 0 ? (
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">{t("systemAdminManagers")}</span>
+                      {info.systemAdmins.map((p) => displayName(p, locale)).join(locale === "zh" ? "、" : ", ")}
+                    </p>
+                  ) : null}
                 </section>
               ) : null}
 

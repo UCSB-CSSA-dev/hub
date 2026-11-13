@@ -59,4 +59,15 @@ for (const size of [192, 512]) {
   await sharp(icon).resize(size, size).png({ palette: true, quality: 90 }).toFile(file(`public/brand/icon-${size}.png`));
 }
 
+// 小飒 (public/brand/{idle,think}.gif, 480×480): small animations for chat avatars and still
+// first frames for reduced motion.
+for (const state of ["idle", "think"]) {
+  const source = file(`public/brand/${state}.gif`);
+  await sharp(source, { animated: true })
+    .resize(160, 160)
+    .gif({ colours: 96, effort: 10, interFrameMaxError: 8, interPaletteMaxError: 8 })
+    .toFile(file(`public/brand/${state}-160.gif`));
+  await sharp(source).resize(128, 128).png({ palette: true }).toFile(file(`public/brand/${state}.png`));
+}
+
 console.log("Brand assets written.");

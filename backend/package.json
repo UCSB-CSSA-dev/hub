@@ -8,6 +8,7 @@
     "dev:all": "convex dev --start \"npm run dev --prefix ../frontend\"",
     "deploy": "convex deploy",
     "codegen": "convex codegen",
+    "ai:env": "node scripts/push-ai-env.mjs",
     "typecheck": "tsc --noEmit -p convex && tsc --noEmit -p tests",
     "lint": "eslint convex tests",
     "test": "vitest run",

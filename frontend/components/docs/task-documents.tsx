@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { useAiCredits } from "@/components/ai/ai-chat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,12 +19,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { api, LIMITS, type Id } from "@/lib/api";
+import { Segmented, type SegmentedOption } from "@/components/ui/segmented";
+import { Textarea } from "@/components/ui/textarea";
+import { AI_DOC_COST, api, LIMITS, type Id } from "@/lib/api";
 import { useErrorToast } from "@/lib/errors";
 import { useEnterSubmit } from "@/lib/keyboard";
 import { docHref } from "@/lib/links";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
+import { useDictationSupported } from "./dictation";
 
 type DocumentRow = NonNullable<FunctionReturnType<typeof api.documents.listForTask>>["documents"][number];
 
@@ -99,21 +103,36 @@ export function NewDocumentDialog({
   onCreate: (title: string) => Promise<Id<"documents">>;
 }) {
   const t = useTranslations("docs");
+  const tAi = useTranslations("ai");
   const router = useRouter();
   const showError = useErrorToast();
+  const credits = useAiCredits();
+  const dictationSupported = useDictationSupported();
+  const write = useMutation(api.aiDocs.write);
   const [title, setTitle] = useState("");
+  const [start, setStart] = useState<"blank" | "listen" | "sasa">("blank");
+  const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const withSasa = start === "sasa" && prompt.trim().length > 0;
   const submit = async () => {
-    if (!title.trim() || busy) return;
+    if (!title.trim() || busy || (start === "sasa" && !withSasa)) return;
     setBusy(true);
     try {
-      router.push(docHref(await onCreate(title)));
+      const documentId = await onCreate(title);
+      // The document exists either way; a failed 小飒 request just shows its error.
+      if (withSasa) await write({ documentId, prompt: prompt.trim() }).catch(showError);
+      router.push(`${docHref(documentId)}${start === "listen" ? "&listen=1" : ""}`);
     } catch (error) {
       showError(error);
       setBusy(false);
     }
   };
   const enter = useEnterSubmit(() => void submit());
+  const options: SegmentedOption<"blank" | "listen" | "sasa">[] = [
+    { value: "blank", label: t("startBlank") },
+    ...(dictationSupported ? [{ value: "listen" as const, label: t("startListen") }] : []),
+    ...(credits?.configured ? [{ value: "sasa" as const, label: t("startSasa") }] : []),
+  ];
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -129,11 +148,30 @@ export function NewDocumentDialog({
           onChange={(e) => setTitle(e.target.value)}
           {...enter}
         />
+        {options.length > 1 ? (
+          <div className="flex flex-col gap-2">
+            <Segmented value={start} options={options} onChange={setStart} label={t("startWith")} className="w-fit" />
+            {start === "listen" ? (
+              <p className="text-xs text-muted-foreground">{t("startListenHint")}</p>
+            ) : start === "sasa" ? (
+              <>
+                <Textarea
+                  value={prompt}
+                  maxLength={LIMITS.aiDocPrompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={tAi("writePlaceholder")}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">{tAi("writeCost", { cost: AI_DOC_COST.write })}</p>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {t("cancel")}
           </Button>
-          <Button disabled={!title.trim() || busy} onClick={() => void submit()}>
+          <Button disabled={!title.trim() || busy || (start === "sasa" && !withSasa)} onClick={() => void submit()}>
             {t("create")}
           </Button>
         </DialogFooter>

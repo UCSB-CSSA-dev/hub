@@ -49,3 +49,32 @@ export function startOfPacificDay(ms: number) {
 export function endOfPacificDay(ms: number) {
   return startOfPacificDay(startOfPacificDay(ms) + 36 * 60 * 60 * 1000);
 }
+
+/** The instant a Pacific wall-clock time happens. Day overflow is allowed (day 0 is the previous month's last day). */
+export function pacificWallTime(year: number, month: number, day: number, hour: number, minute = 0) {
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const guess = asUtc - offsetAt(asUtc);
+  return asUtc - offsetAt(guess);
+}
+
+/** Day of the week in Pacific time, 0 = Sunday. */
+export function pacificWeekday(ms: number) {
+  const p = pacificParts(ms);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+}
+
+/**
+ * The most recent `weekday` at `hour`:00 Pacific at or before `ms`, and the next one after it.
+ * Used for the weekly 小飒 credit reset (Sunday 08:00).
+ */
+export function pacificWeekWindow(ms: number, weekday: number, hour: number) {
+  const p = pacificParts(ms);
+  const back = (pacificWeekday(ms) - weekday + 7) % 7;
+  let start = pacificWallTime(p.year, p.month, p.day - back, hour);
+  let startDay = p.day - back;
+  if (start > ms) {
+    startDay -= 7;
+    start = pacificWallTime(p.year, p.month, startDay, hour);
+  }
+  return { start, end: pacificWallTime(p.year, p.month, startDay + 7, hour) };
+}

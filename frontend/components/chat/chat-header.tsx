@@ -15,11 +15,15 @@ import {
   MoreVerticalIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { AiModeDialog, AiModeIndicator, aiChatType, CreditsBadge, useAiCredits } from "@/components/ai/ai-chat";
+import { SasaAvatar } from "@/components/ai/sasa-avatar";
 import { useViewer } from "@/components/auth/account-state";
 import { chatHasDocs } from "@/components/docs/chat-documents";
 import { PageHeader } from "@/components/layout/app-shell";
@@ -49,16 +53,19 @@ export function ChatHeader({
   onEndedApps,
   onDocuments,
   onNewDocument,
+  onClose,
   extra,
 }: {
   title: string;
-  backHref: string;
+  /** Unset in the floating 小飒 panel, which has its own close button. */
+  backHref?: string;
   onSearch: () => void;
   onRetention: () => void;
   onGroupInfo: () => void;
   onEndedApps: () => void;
   onDocuments: () => void;
   onNewDocument: () => void;
+  onClose?: () => void;
   extra?: ReactNode;
 }) {
   const t = useTranslations("chat");
@@ -69,23 +76,37 @@ export function ChatHeader({
   const { hidden, restore } = useHiddenMessages(viewer._id);
   const isMember = channel.access.via === "member";
   const canStartDoc = isMember && channel.access.canPost && channel.access.canInteract;
+  const assistant = channel.type === "assistant";
+  const credits = useAiCredits();
+  const [aiDialog, setAiDialog] = useState(false);
+  const canToggleAi =
+    viewer.isAdmin &&
+    isMember &&
+    aiChatType(channel.type) &&
+    !channel.access.readOnly &&
+    (channel.aiEnabled || credits?.configured === true);
 
   return (
     <PageHeader
       title={
         <span className="flex items-center gap-2">
-          <Button asChild size="icon-sm" variant="ghost" className="lg:hidden" aria-label={t("title")}>
-            <Link href={backHref}>
-              <ArrowLeftIcon />
-            </Link>
-          </Button>
+          {backHref ? (
+            <Button asChild size="icon-sm" variant="ghost" className="lg:hidden" aria-label={t("title")}>
+              <Link href={backHref}>
+                <ArrowLeftIcon />
+              </Link>
+            </Button>
+          ) : null}
+          {assistant ? <SasaAvatar className="size-7" /> : null}
           <span className="truncate">{title}</span>
           {channel.muted ? <BellOffIcon className="size-3.5 shrink-0 text-muted-foreground" /> : null}
         </span>
       }
     >
       {extra}
-      <ChatMembersButton />
+      {channel.aiEnabled ? <AiModeIndicator /> : null}
+      {assistant && isMember ? <CreditsBadge /> : null}
+      {assistant ? null : <ChatMembersButton />}
       <MonitoredIcon />
       <Button size="icon-sm" variant="ghost" aria-label={t("searchTitle")} onClick={onSearch}>
         <SearchIcon />
@@ -132,13 +153,19 @@ export function ChatHeader({
               {channel.muted ? t("unmute") : t("mute")}
             </DropdownMenuItem>
           ) : null}
+          {canToggleAi ? (
+            <DropdownMenuItem onSelect={() => setAiDialog(true)}>
+              <SparklesIcon />
+              {channel.aiEnabled ? t("aiModeOff") : t("aiModeOn")}
+            </DropdownMenuItem>
+          ) : null}
           {channel.access.canSetRetention ? (
             <DropdownMenuItem onSelect={onRetention}>
               <ClockIcon />
               {t("retentionMenu", { days: channel.retentionDays })}
             </DropdownMenuItem>
           ) : null}
-          {channel.type !== "dm" ? (
+          {channel.type !== "dm" && !assistant ? (
             <DropdownMenuItem onSelect={onEndedApps}>
               <ListChecksIcon />
               {t("endedApps")}
@@ -164,6 +191,12 @@ export function ChatHeader({
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+      {onClose ? (
+        <Button size="icon-sm" variant="ghost" aria-label={t("close")} onClick={onClose}>
+          <XIcon />
+        </Button>
+      ) : null}
+      {canToggleAi ? <AiModeDialog open={aiDialog} onOpenChange={setAiDialog} /> : null}
     </PageHeader>
   );
 }

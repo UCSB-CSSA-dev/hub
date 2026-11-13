@@ -15,5 +15,7 @@ crons.interval("retry failed emails", { minutes: 10 }, internal.email.retryFaile
 crons.daily("clean up notifications", { hourUTC: 11, minuteUTC: 0 }, internal.notifications.cleanup, {});
 crons.daily("empty file trash", { hourUTC: 11, minuteUTC: 30 }, internal.files.purgeTrash, {});
 crons.hourly("forget unfinished Drive uploads", { minuteUTC: 40 }, internal.drive.cleanupUploads, {});
+crons.interval("fail stuck Sasa requests", { minutes: 10 }, internal.ai.sweepStale, {});
+crons.daily("clean up Sasa ledger", { hourUTC: 12, minuteUTC: 0 }, internal.ai.cleanup, {});
 
 export default crons;

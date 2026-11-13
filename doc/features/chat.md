@@ -14,6 +14,9 @@ The decisions behind this design are in [09-roadmap.md, Stage 2](../09-roadmap.m
 | `department` | With the department | That department's members (derived); the 主席团 chat also includes every 部长 of a regular department | Readers; announcements: that department's 部长, admins | Department name |
 | `group` | Proposal approved by a 部长, or created directly by a 部长 / admin | Explicit members, plus the 部长 of every involved department (derived), plus 主席团 during a takeover | Readers | Custom name |
 | `dm` | Any approved user | Exactly 2 | Both, unless one is deactivated | Other person's name |
+| `assistant` | On first open (Stage 4) | Its owner; overseeable like a DM | The owner (every message is a question for 小飒) | "小飒 / Sasa", pinned on top |
+
+Org, department and group chats can also have **AI mode** switched on, which lets the assistant 小飒 read new messages and answer `@小飒` questions there. See [ai-assistant.md](ai-assistant.md).
 
 "Derived" access is computed on every read from `departmentMemberships`, so roster changes apply immediately. A `channelMembers` row is created lazily the first time someone opens an implicit channel; it holds `lastReadAt`, `announcementsReadAt`, and `muted`. Group and DM members are stored explicitly (`channelMembers.joinedAt` is set for explicit group members).
 
@@ -56,7 +59,7 @@ Until 2026-10 announcements had their own `announcement` channels ("CSSA 公告"
 - Unread counts are red bubbles on the avatar box; muted chats show a dot instead and a bell-off icon on the row. Every new message pushes to devices with notifications on, except in muted chats (see [Push notifications](notifications-and-email.md#push-notifications)). Unseen announcements replace the badge with an amber megaphone badge (see [Announcements](#announcements-公告)). Ended groups and archived channels are dimmed with a tag.
 - The 群聊 header has the proposals button (with a dot when something waits for the viewer) and "+" (propose for 部员, create for 部长 and admins).
 - The 监督 section shows only for admins and 部长.
-- The people icon in the conversation header (left of the 👁) opens the member list (`channels.members`): a centered dialog on phones, a full-height panel on the right from `md` up. 主席团 come first, then 部长 with their departments, then everyone else; a search box appears from 12 members.
+- The people icon in the conversation header (left of the 👁) opens the member list (`channels.members`): a centered dialog on phones, a full-height panel on the right from `md` up. 主席团 come first, then system admins, then 部长 with their departments, then everyone else; a search box appears from 12 members. System admins get their own "系统管理员" badge and are labeled 主席团 only if they're also in 主席团 (then they show both). DMs show no role badges.
 - Below the `lg` breakpoint (1024px), including tablets where the app sidebar is still shown, the channel list and the conversation are separate screens; the conversation header has a back arrow to the list. From `lg` up they sit side by side and the org channel opens by default.
 - URL parameters on `/chat/`: `c` (channel), `m` (jump to a message), `app` (open a chat app), `proposals=1` (open the group proposals dialog), `oversee=<userId>` (oversight view of one person).
 
@@ -132,6 +135,7 @@ In department, group and DM chats (not 全体), any participant who can post can
 - "聊天文档 / Chat documents" under the same header button lists every document of the chat (`documents.listForChat`), including ones whose card has expired with the chat history.
 - @mentions suggest the chat's participants. Document cards can't be edited, forwarded or multi-selected.
 - Up to 50 documents per chat (`LIMITS.documentsPerChat`).
+- **With 小飒 (Stage 4):** in a chat with AI mode on, a question for 小飒 can attach up to 3 documents everyone in the chat can open (附上文档 in the composer), and replying to a document card with a question attaches that document. The question shows them as chips. Summaries, writing and dictation inside documents are described in [ai-assistant.md](ai-assistant.md#questions-about-documents).
 
 ## Multi-select
 

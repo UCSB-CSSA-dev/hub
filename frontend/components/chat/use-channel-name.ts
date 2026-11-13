@@ -17,6 +17,8 @@ export function useChannelName() {
           general: t("general"),
           orgAnnouncements: t("orgAnnouncements"),
           announcementOf: (department) => t("announcementOf", { department }),
+          sasa: t("sasaChat"),
+          sasaOf: (owner) => t("sasaChatOf", { owner }),
         },
         viewer._id,
       ),

@@ -11,6 +11,7 @@ import {
   ScrollTextIcon,
   SettingsIcon,
   ShieldIcon,
+  SparklesIcon,
   UsersIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { SasaFab } from "@/components/ai/sasa-fab";
 import { useViewer } from "@/components/auth/account-state";
 import { PushSync } from "@/components/notifications/push-sync";
 import { PersonAvatar } from "@/components/people/person-avatar";
@@ -42,6 +44,7 @@ type NavItem = {
     | "admin"
     | "adminOverview"
     | "auditLog"
+    | "sasa"
     | "settings";
   href: string;
   icon: LucideIcon;
@@ -61,6 +64,7 @@ const MAIN_NAV: NavItem[] = [CHAT, FILES, ASSIGNMENTS];
 
 const ADMIN_OVERVIEW: NavItem = { key: "adminOverview", href: "/admin/", icon: LayoutDashboardIcon, exact: true };
 const AUDIT_LOG: NavItem = { key: "auditLog", href: "/admin/audit/", icon: ScrollTextIcon };
+const SASA_ADMIN: NavItem = { key: "sasa", href: "/admin/ai/", icon: SparklesIcon };
 const SETTINGS: NavItem = { key: "settings", href: "/settings/", icon: SettingsIcon };
 
 // On phones several pages share one bottom tab, with a bar at the top to switch between them.
@@ -70,15 +74,22 @@ function useNav() {
   const viewer = useViewer();
   const unread = useQuery(api.notifications.unreadCount) ?? 0;
   const todo = useQuery(api.assignments.myOpenCount) ?? 0;
+  const appeals = useQuery(api.ai.pendingAppealCount, viewer.isSystemAdmin ? {} : "skip") ?? 0;
   const isManager = viewer.isAdmin || viewer.ledDepartmentIds.length > 0;
   const counts: Partial<Record<NavItem["key"], number>> = {
     notifications: unread,
     assignments: todo,
     roster: viewer.reviewCount,
-    admin: viewer.reviewCount,
+    admin: viewer.reviewCount + appeals,
+    sasa: appeals,
   };
   // The roster is open to everyone; it sits with the admin pages because that's where people are managed.
-  const admin = [ROSTER, ...(isManager ? [ADMIN_OVERVIEW] : []), ...(viewer.isAdmin ? [AUDIT_LOG] : [])];
+  const admin = [
+    ROSTER,
+    ...(isManager ? [ADMIN_OVERVIEW] : []),
+    ...(viewer.isAdmin ? [AUDIT_LOG] : []),
+    ...(viewer.isSystemAdmin ? [SASA_ADMIN] : []),
+  ];
   const mobile = [CHAT, FILES, ASSIGNMENTS, NOTIFICATIONS, MOBILE_ADMIN, SETTINGS];
   const mobileSections = [{ tab: MOBILE_ADMIN, items: admin }];
   return { main: MAIN_NAV, admin, mobile, mobileSections, counts };
@@ -99,6 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <MobileNav />
+      <SasaFab />
       <PushSync />
     </div>
   );

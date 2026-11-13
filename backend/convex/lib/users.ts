@@ -17,6 +17,8 @@ export type UserSummary = {
   bio?: string;
   isSystemAdmin: boolean;
   status?: Doc<"users">["status"];
+  /** 小飒 */
+  isBot?: boolean;
 };
 
 export function toUserSummary(user: Doc<"users">): UserSummary {
@@ -30,6 +32,7 @@ export function toUserSummary(user: Doc<"users">): UserSummary {
     bio: user.bio,
     isSystemAdmin: user.isSystemAdmin === true,
     status: user.status,
+    ...(user.isBot ? { isBot: true } : {}),
   };
 }
 

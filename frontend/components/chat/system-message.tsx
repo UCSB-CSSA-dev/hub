@@ -60,6 +60,10 @@ export function useSystemText() {
           kind: tApps(`kind.${String(params.kind)}` as "kind.poll"),
           title: String(params.title ?? ""),
         });
+      case "ai_enabled":
+        return t("aiEnabled", { actor: person("actorId") });
+      case "ai_disabled":
+        return t("aiDisabled", { actor: person("actorId") });
       case "meeting_confirmed": {
         const slot = Number(params.slot);
         const start = slotMinutes(slot);

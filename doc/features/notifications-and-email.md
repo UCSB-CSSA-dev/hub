@@ -29,6 +29,10 @@ Every notification below is in-app and pushed. Email is only the [daily digest](
 | New comment on a submission | The other side (assignee or reviewers) | `assignment_comment` |
 | @mentioned in a document | Newly mentioned people who can open it | `doc_mention` |
 | @mentioned in a task or event description | Newly mentioned people in the chat (not those just assigned) | `task_mention` |
+| 小飒 finished answering an `@小飒` question in a chat | The asker | `reply` |
+| 小飒 suggested a task for someone | The suggested assignees | `mention` |
+| A member appealed a 小飒 refusal | Every system admin | `ai_appeal` |
+| A system admin decided an appeal | The asker | `ai_appeal_reviewed` (`approved`, optional `note`) |
 
 Account requests, approvals and invites are not emailed. Approvers see the roster badge, and applicants see the result when they next sign in.
 
