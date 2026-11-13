@@ -30,6 +30,8 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import { useAiCredits } from "@/components/ai/ai-chat";
+import { SasaDocPicker, type PickedDoc } from "@/components/ai/doc-picker";
 import { useViewer } from "@/components/auth/account-state";
 import { chatHasDocs, NewChatDocumentDialog } from "@/components/docs/chat-documents";
 import { FilePickerDialog } from "@/components/files/file-dialogs";
@@ -55,6 +57,8 @@ import { formatBytes } from "./attachments";
 import { useChat } from "./chat-context";
 import { usePlainPreview } from "./markdown";
 import { personById, type Person } from "./types";
+
+const SASA_TEXT = /@(?:sasa\b|小飒)/i;
 
 const THUMBNAIL_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
 
@@ -113,6 +117,7 @@ function Banner({ icon, children, tone }: { icon: ReactNode; children: ReactNode
 
 function Editor({ name }: { name: string }) {
   const t = useTranslations("chat");
+  const tAi = useTranslations("ai");
   const locale = useLocale() as Locale;
   const { channel, replyTo, setReplyTo, editing, setEditing } = useChat();
   const send = useMutation(api.messages.send);
@@ -135,6 +140,7 @@ function Editor({ name }: { name: string }) {
   const [mentions, setMentions] = useState<MentionMap>(new Map());
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [sharedFiles, setSharedFiles] = useState<{ _id: Id<"files">; name: string }[]>([]);
+  const [sasaDocs, setSasaDocs] = useState<PickedDoc[]>([]);
   const [pickingFiles, setPickingFiles] = useState(false);
   const [newDoc, setNewDoc] = useState(false);
   const [announce, setAnnounce] = useState(false);
@@ -186,10 +192,35 @@ function Editor({ name }: { name: string }) {
   const readyIds = uploads.flatMap((u) => (u.attachmentId ? [u.attachmentId] : []));
   const encoded = encodeMentions(body, mentions).trim();
   const tooLong = encoded.length > LIMITS.messageBody;
-  const canSend =
+  const sendable =
     !uploading && !tooLong && (encoded.length > 0 || (!editing && (readyIds.length > 0 || sharedFiles.length > 0)));
   const announcing = announce && !editing && channel.access.canAnnounce;
-  const placeholder = t(announcing ? "announcementPlaceholder" : "messagePlaceholder", { name });
+  const assistant = channel.type === "assistant";
+  const credits = useAiCredits();
+  const sasaId = participants?.find((p) => p.isBot)?._id;
+  const asking =
+    !editing &&
+    (assistant || (channel.aiEnabled && (SASA_TEXT.test(body) || (sasaId !== undefined && encoded.includes(mentionToken(sasaId))))));
+  const noCredits = asking && credits !== undefined && !credits.unlimited && credits.balance === 0;
+  const waiting = asking && credits?.inFlight === true;
+  const aiBlocked = asking && (noCredits || waiting || credits?.configured === false);
+  const canSend = sendable && !aiBlocked;
+  const placeholder = assistant
+    ? tAi("placeholder")
+    : t(announcing ? "announcementPlaceholder" : "messagePlaceholder", { name });
+  const hint = !asking
+    ? null
+    : credits?.configured === false
+      ? tAi("notConfigured")
+      : noCredits
+        ? tAi("noCredits")
+        : waiting
+          ? tAi("waiting")
+          : credits?.unlimited
+            ? tAi("askHintUnlimited")
+            : credits
+              ? tAi("askHint", { balance: credits.balance })
+              : null;
 
   const resetDraft = () => {
     setBody("");
@@ -208,10 +239,12 @@ function Editor({ name }: { name: string }) {
       }
       return;
     }
-    const snapshot = { body, mentions, uploads, sharedFiles, replyTo, announcing };
+    const snapshot = { body, mentions, uploads, sharedFiles, sasaDocs, replyTo, announcing };
+    const documentIds = asking && sasaDocs.length > 0 ? sasaDocs.map((d) => d._id) : undefined;
     resetDraft();
     setUploads([]);
     setSharedFiles([]);
+    setSasaDocs([]);
     setReplyTo(null);
     setAnnounce(false);
     try {
@@ -222,12 +255,14 @@ function Editor({ name }: { name: string }) {
         attachmentIds: readyIds.length ? readyIds : undefined,
         fileIds: snapshot.sharedFiles.length ? snapshot.sharedFiles.map((f) => f._id) : undefined,
         announcement: snapshot.announcing || undefined,
+        documentIds,
       });
     } catch (error) {
       setBody(snapshot.body);
       setMentions(snapshot.mentions);
       setUploads(snapshot.uploads);
       setSharedFiles(snapshot.sharedFiles);
+      setSasaDocs(snapshot.sasaDocs);
       setReplyTo(snapshot.replyTo);
       setAnnounce(snapshot.announcing);
       showError(error);
@@ -400,6 +435,12 @@ function Editor({ name }: { name: string }) {
         </div>
       ) : null}
 
+      {asking && credits?.configured !== false ? (
+        <div className="mb-2">
+          <SasaDocPicker channelId={channel._id} shared={!assistant} picked={sasaDocs} onChange={setSasaDocs} />
+        </div>
+      ) : null}
+
       {sharedFiles.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-2">
           {sharedFiles.map((f) => (
@@ -453,7 +494,7 @@ function Editor({ name }: { name: string }) {
       ) : null}
 
       <div className="flex items-end gap-2">
-        {!editing ? (
+        {!editing && !assistant ? (
           <>
             <input ref={fileRef} type="file" multiple hidden onChange={onFileInput} />
             <DropdownMenu>
@@ -544,9 +585,13 @@ function Editor({ name }: { name: string }) {
           <SendIcon />
         </Button>
       </div>
-      <p className={tooLong ? "mt-1 text-xs text-destructive" : "mt-1 hidden text-xs text-subtle-foreground md:block"}>
-        {tooLong ? t("tooLong", { max: LIMITS.messageBody }) : t("sendHint")}
-      </p>
+      {tooLong ? (
+        <p className="mt-1 text-xs text-destructive">{t("tooLong", { max: LIMITS.messageBody })}</p>
+      ) : hint ? (
+        <p className={cn("mt-1 text-xs", aiBlocked ? "text-destructive" : "text-primary")}>{hint}</p>
+      ) : (
+        <p className="mt-1 hidden text-xs text-subtle-foreground md:block">{t("sendHint")}</p>
+      )}
     </div>
   );
 }

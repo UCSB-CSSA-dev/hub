@@ -4,6 +4,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { channelAccess, channelAudience, explicitMembers, presidiumUserIds, type ChannelAccess } from "./channels";
 import { LIMITS } from "./constants";
+import { snapshotText } from "./docText";
 import { appError } from "./errors";
 import { inTaskFolder, loadSpace, spaceAccess, type Space, type SpaceAccess } from "./files";
 import { notifyMany } from "./notify";
@@ -104,6 +105,19 @@ export async function documentAccessFor(ctx: QueryCtx, viewer: ViewerContext, id
   throw appError("NOT_FOUND");
 }
 
+/** `documentAccessFor`, or null when the viewer can't open the document. */
+export async function tryDocumentAccess(ctx: QueryCtx, viewer: ViewerContext, id: string) {
+  try {
+    return await documentAccessFor(ctx, viewer, id);
+  } catch {
+    return null;
+  }
+}
+
+export async function canReadDocument(ctx: QueryCtx, viewer: ViewerContext, id: string) {
+  return (await tryDocumentAccess(ctx, viewer, id)) !== null;
+}
+
 export async function documentAccess(ctx: QueryCtx, id: string) {
   return documentAccessFor(ctx, await requireApproved(ctx), id);
 }
@@ -186,12 +200,7 @@ export async function recordDocumentMentions(ctx: MutationCtx, access: DocumentA
   for (const userId of fresh) {
     const user = await ctx.db.get("users", userId);
     if (!user || user.status !== "approved") continue;
-    try {
-      await documentAccessFor(ctx, await buildViewerContext(ctx, user), doc._id);
-      recipients.push(userId);
-    } catch {
-      continue;
-    }
+    if (await canReadDocument(ctx, await buildViewerContext(ctx, user), doc._id)) recipients.push(userId);
   }
   await notifyMany(ctx, recipients, {
     type: "doc_mention",
@@ -202,8 +211,44 @@ export async function recordDocumentMentions(ctx: MutationCtx, access: DocumentA
   if (!same) await ctx.db.patch("documents", doc._id, { mentionedIds: current.slice(0, 200) });
 }
 
+/** The document's plain text for 小飒; documents saved before `text` existed fall back to the latest snapshot. */
+export async function documentText(ctx: QueryCtx, doc: Doc<"documents">): Promise<string> {
+  if (doc.text !== undefined) return doc.text;
+  const snapshot = await ctx.runQuery(components.prosemirrorSync.lib.getSnapshot, { id: doc._id });
+  return snapshotText(snapshot.content);
+}
+
+/**
+ * Whether everyone who can read `channel` can also open the document, so 小飒 may use it in a shared chat:
+ * the chat's own documents, documents of the chat's tasks, and Files documents outside the 主席团 space.
+ */
+export async function docSharedIn(ctx: QueryCtx, doc: Doc<"documents">, channel: Doc<"channels">) {
+  if (doc.channelId) return doc.channelId === channel._id;
+  if (doc.assignmentId) {
+    const assignment = await ctx.db.get("assignments", doc.assignmentId);
+    return assignment?.channelId === channel._id && assignment.status !== "draft";
+  }
+  if (doc.fileId) {
+    const file = await ctx.db.get("files", doc.fileId);
+    if (!file || file.deletedAt) return false;
+    const space = await loadSpace(ctx, file.departmentId);
+    return space.department?.kind !== "presidium";
+  }
+  return false;
+}
+
 /** Deletes a document row and its content. */
 export async function deleteDocument(ctx: MutationCtx, documentId: Id<"documents">) {
+  const summary = await ctx.db
+    .query("aiDocSummaries")
+    .withIndex("by_document", (q) => q.eq("documentId", documentId))
+    .unique();
+  if (summary) await ctx.db.delete("aiDocSummaries", summary._id);
+  const drafts = await ctx.db
+    .query("aiDocDrafts")
+    .withIndex("by_document_user", (q) => q.eq("documentId", documentId))
+    .collect();
+  for (const draft of drafts) await ctx.db.delete("aiDocDrafts", draft._id);
   await ctx.db.delete("documents", documentId);
   await ctx.runMutation(components.prosemirrorSync.lib.deleteDocument, { id: documentId });
 }

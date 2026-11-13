@@ -6,7 +6,7 @@ import { BrandMark } from "@/components/layout/brand";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 
-const SECTIONS = ["use", "oversight", "storage", "delete", "contact"] as const;
+const SECTIONS = ["use", "oversight", "ai", "storage", "delete", "contact"] as const;
 
 /** Public page (no sign-in), linked from Google's OAuth consent screen. */
 export default function PrivacyPage() {

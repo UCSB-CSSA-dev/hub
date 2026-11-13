@@ -20,6 +20,8 @@ const INVALID_FIELDS = new Set([
   "status",
   "name",
   "link",
+  "rule",
+  "memory_full",
 ]);
 
 export function errorCode(error: unknown): string {

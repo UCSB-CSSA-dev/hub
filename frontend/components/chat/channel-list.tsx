@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeftIcon,
   BellOffIcon,
@@ -9,7 +9,9 @@ import {
   EyeIcon,
   HashIcon,
   MegaphoneIcon,
+  PinIcon,
   PlusIcon,
+  SparklesIcon,
   UsersRoundIcon,
 } from "lucide-react";
 import Image from "next/image";
@@ -18,6 +20,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 import logoMark from "@/assets/brand/logo-mark.webp";
+import { useAiCredits } from "@/components/ai/ai-chat";
+import { SasaAvatar } from "@/components/ai/sasa-avatar";
 import { useViewer } from "@/components/auth/account-state";
 import { GroupFormDialog } from "@/components/groups/group-form-dialog";
 import { ProposalsDialog } from "@/components/groups/proposals-dialog";
@@ -28,6 +32,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, LIMITS, type Id } from "@/lib/api";
+import { useErrorToast } from "@/lib/errors";
 import type { Locale } from "@/lib/locale-store";
 import { displayName } from "@/lib/names";
 import { cn } from "@/lib/utils";
@@ -48,6 +53,7 @@ export function ChannelList({ lists, activeId }: { lists: ChannelLists; activeId
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="flex flex-col gap-4 p-2">
+        <SasaEntry channel={lists.assistant} active={lists.assistant?._id === activeId} />
         <Section title={t("sectionGeneral")}>{lists.org.map(item)}</Section>
         {lists.departments.length > 0 ? (
           <Section title={t("sectionDepartments")}>{lists.departments.map(item)}</Section>
@@ -117,6 +123,35 @@ export function ChannelList({ lists, activeId }: { lists: ChannelLists; activeId
       </div>
       <ProposalsDialog open={proposalsOpen} onOpenChange={setProposalsOpen} />
     </ScrollArea>
+  );
+}
+
+/** The viewer's private 小飒 chat, pinned on top; created on first open. */
+function SasaEntry({ channel, active }: { channel: Channel | null; active: boolean }) {
+  const t = useTranslations("chat");
+  const credits = useAiCredits();
+  const router = useRouter();
+  const ensure = useMutation(api.ai.ensureAssistantChannel);
+  const showError = useErrorToast();
+  if (channel) {
+    return <ChannelItem channel={channel} active={active} href={`/chat/?c=${channel._id}`} pinned />;
+  }
+  if (!credits?.configured) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => ensure().then((id) => router.push(`/chat/?c=${id}`), showError)}
+      className="flex items-center gap-2.5 rounded-md px-2 py-2 text-left hover:bg-accent/60"
+    >
+      <SasaAvatar className="size-11 rounded-md" />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-center gap-1 text-sm font-medium">
+          {t("sasaChat")}
+          <PinIcon className="size-3 text-muted-foreground" />
+        </span>
+        <span className="truncate text-xs text-muted-foreground">{t("sasaIntro")}</span>
+      </span>
+    </button>
   );
 }
 
@@ -214,7 +249,17 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   );
 }
 
-function ChannelItem({ channel, active, href }: { channel: Channel; active: boolean; href: string }) {
+function ChannelItem({
+  channel,
+  active,
+  href,
+  pinned,
+}: {
+  channel: Channel;
+  active: boolean;
+  href: string;
+  pinned?: boolean;
+}) {
   const t = useTranslations("chat");
   const name = useChannelName()(channel);
   const previewText = usePreviewText();
@@ -263,7 +308,13 @@ function ChannelItem({ channel, active, href }: { channel: Channel; active: bool
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1">
+            <span className="truncate text-sm font-medium text-foreground">{name}</span>
+            {pinned ? <PinIcon className="size-3 shrink-0 text-muted-foreground" aria-label={t("list.pinned")} /> : null}
+            {channel.aiEnabled ? (
+              <SparklesIcon className="size-3 shrink-0 text-primary" aria-label={t("list.aiOn")} />
+            ) : null}
+          </span>
           {inactive ? (
             <span className="shrink-0 text-[10px] text-muted-foreground">
               {channel.ended ? t("endedTag") : t("archivedTag")}
@@ -308,9 +359,11 @@ function usePreviewText() {
           ? t("task")
           : preview.kind === "doc"
             ? t("doc")
-            : plain(preview.body, preview.people, 80) || t("attachment");
+            : preview.kind === "ai" && !preview.body
+              ? t("ai")
+              : plain(preview.body, preview.people, 80) || t("attachment");
     const text = preview.announcement ? `${t("announcement")} ${content}` : content;
-    if (channel.type === "dm" && !mine) return text;
+    if ((channel.type === "dm" || channel.type === "assistant") && !mine) return text;
     return t("withSender", { name: author, text });
   };
 }
@@ -338,6 +391,7 @@ const FACE_GRID: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 
 /** A DM shows the other person; team chats a grid of up to 9 members; the org chat the CSSA mark. */
 function ChannelFaces({ channel }: { channel: Channel }) {
   const box = "size-11 overflow-hidden rounded-md bg-secondary";
+  if (channel.type === "assistant") return <SasaAvatar className={cn(box, "bg-white")} />;
   if (channel.type === "dm") {
     return channel.otherUser ? (
       <PersonAvatar person={channel.otherUser} className={cn(box, "after:rounded-md [&>*]:rounded-md")} />

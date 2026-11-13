@@ -8,7 +8,9 @@ import {
   explicitMembers,
   groupDepartmentIds,
   isTakenOver,
+  presidiumMemberIds,
   presidiumUserIds,
+  systemAdminIds,
   requireChannelAccess,
 } from "./lib/channels";
 import { LIMITS } from "./lib/constants";
@@ -442,7 +444,11 @@ export const info = query({
           access.canManage && row.userId !== viewer.user._id && (await canPullIn(ctx, viewer, row.userId)),
       });
     }
-    const presidium = takenOver ? [...(await getUserSummaries(ctx, await presidiumUserIds(ctx))).values()] : [];
+    const presidiumIds = takenOver ? await presidiumMemberIds(ctx) : [];
+    const adminIds = takenOver ? (await systemAdminIds(ctx)).filter((id) => !presidiumIds.includes(id)) : [];
+    const managers = await getUserSummaries(ctx, [...presidiumIds, ...adminIds]);
+    const presidium = presidiumIds.flatMap((id) => managers.get(id) ?? []);
+    const systemAdmins = adminIds.flatMap((id) => managers.get(id) ?? []);
     const isExplicit = rows.some((r) => r.userId === viewer.user._id);
     const proposal = channel.proposalId ? await ctx.db.get("groupProposals", channel.proposalId) : null;
 
@@ -455,6 +461,7 @@ export const info = query({
       departments,
       members,
       presidium,
+      systemAdmins,
       proposerId: proposal?.proposerId,
       approverId: proposal?.reviewedBy,
       viewer: {

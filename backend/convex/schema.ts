@@ -24,7 +24,19 @@ export const channelType = v.union(
   v.literal("department"),
   v.literal("group"),
   v.literal("dm"),
+  /** One per user: their private chat with 小飒. */
+  v.literal("assistant"),
 );
+
+export const aiMessageStatus = v.union(
+  v.literal("thinking"),
+  v.literal("streaming"),
+  v.literal("done"),
+  v.literal("refused"),
+  v.literal("failed"),
+);
+
+export const aiSuggestionAction = v.union(v.literal("create_task"), v.literal("create_event"), v.literal("edit"));
 
 export const notificationType = v.union(
   ...NOTIFICATION_TYPES.map((type) => v.literal(type)),
@@ -66,10 +78,13 @@ export default defineSchema({
     digestLocale: v.optional(locale),
     /** Show the sign-in email on the public about-us page (hidden by default). */
     showEmailPublicly: v.optional(v.boolean()),
+    /** The 小飒 assistant. Has no status, so it never shows up in roster or audience queries. */
+    isBot: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("by_status", ["status"])
-    .index("by_isSystemAdmin", ["isSystemAdmin"]),
+    .index("by_isSystemAdmin", ["isSystemAdmin"])
+    .index("by_isBot", ["isBot"]),
 
   preApprovals: defineTable({
     email: v.string(),
@@ -149,10 +164,18 @@ export default defineSchema({
     purpose: v.optional(v.string()),
     proposalId: v.optional(v.id("groupProposals")),
     endedAt: v.optional(v.number()),
+    /** AI mode (org, department, group): messages sent while it's on can be read by 小飒. */
+    aiEnabled: v.optional(v.boolean()),
+    aiEnabledAt: v.optional(v.number()),
+    aiEnabledBy: v.optional(v.id("users")),
+    /** Rate limit for automatic task suggestions: start of the current hour window and model calls in it. */
+    aiScanWindowStart: v.optional(v.number()),
+    aiScanCount: v.optional(v.number()),
   })
     .index("by_type", ["type"])
     .index("by_department", ["departmentId"])
-    .index("by_dmKey", ["dmKey"]),
+    .index("by_dmKey", ["dmKey"])
+    .index("by_aiEnabled", ["aiEnabled"]),
 
   /** Departments involved in a group chat. Their 部长 are members automatically. */
   groupDepartments: defineTable({
@@ -206,8 +229,31 @@ export default defineSchema({
     authorId: v.id("users"),
     body: v.string(),
     kind: v.optional(
-      v.union(v.literal("user"), v.literal("system"), v.literal("forward"), v.literal("task"), v.literal("doc")),
+      v.union(
+        v.literal("user"),
+        v.literal("system"),
+        v.literal("forward"),
+        v.literal("task"),
+        v.literal("doc"),
+        v.literal("ai"),
+      ),
     ),
+    /** Sent while AI mode was on (or in a private 小飒 chat); only these are ever given to the model. */
+    aiReadable: v.optional(v.boolean()),
+    /** kind "ai": 小飒's answer, refusal, notice, or task suggestion card. */
+    ai: v.optional(
+      v.object({
+        status: aiMessageStatus,
+        requestId: v.optional(v.id("aiRequests")),
+        suggestionId: v.optional(v.id("aiSuggestions")),
+        /** A fixed notice rendered from translations, e.g. "appeal_denied"; the body then holds the admin's note. */
+        notice: v.optional(v.string()),
+        /** Who had 小飒 post this (announcements sent from a document summary). */
+        actorId: v.optional(v.id("users")),
+      }),
+    ),
+    /** Documents attached to a question for 小飒 (at most three, each readable by everyone in the chat). */
+    aiDocumentIds: v.optional(v.array(v.id("documents"))),
     mentionUserIds: v.optional(v.array(v.id("users"))),
     mentionAll: v.optional(v.boolean()),
     replyToId: v.optional(v.id("messages")),
@@ -340,9 +386,12 @@ export default defineSchema({
     updatedBy: v.id("users"),
     /** People mentioned in the last saved version, so only new mentions notify. */
     mentionedIds: v.optional(v.array(v.id("users"))),
+    /** Plain-text copy of the last saved version (capped), for 小飒. */
+    text: v.optional(v.string()),
   })
     .index("by_assignment", ["assignmentId"])
-    .index("by_channel", ["channelId"]),
+    .index("by_channel", ["channelId"])
+    .index("by_updatedAt", ["updatedAt"]),
 
   /** Tasks and events (UI: 任务 / 活动). */
   assignments: defineTable({
@@ -490,6 +539,177 @@ export default defineSchema({
     .index("by_app", ["appId"])
     .index("by_app_user", ["appId", "userId"])
     .index("by_user", ["userId"]),
+
+  /**
+   * One request to 小飒. `cost` is what it took from the asker's balance in `weekKey`.
+   * Chat questions have a channel and question message; document requests have `documentId`.
+   */
+  aiRequests: defineTable({
+    userId: v.id("users"),
+    channelId: v.optional(v.id("channels")),
+    questionMessageId: v.optional(v.id("messages")),
+    replyMessageId: v.optional(v.id("messages")),
+    documentId: v.optional(v.id("documents")),
+    source: v.union(
+      v.literal("mention"),
+      v.literal("private"),
+      v.literal("appeal"),
+      v.literal("doc_summary"),
+      v.literal("doc_write"),
+    ),
+    status: v.union(v.literal("pending"), v.literal("done"), v.literal("refused"), v.literal("failed")),
+    cost: v.number(),
+    /** Pacific date of the Sunday the credit week started on (YYYY-MM-DD). */
+    weekKey: v.string(),
+    /** Appeal re-answers skip the relevance filter. */
+    skipFilter: v.optional(v.boolean()),
+    model: v.optional(v.string()),
+    error: v.optional(v.string()),
+  })
+    .index("by_user_week", ["userId", "weekKey"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_week", ["weekKey"]),
+
+  /** Credits given back (approved appeals); counted in the week they were granted. */
+  aiCreditAdjustments: defineTable({
+    userId: v.id("users"),
+    weekKey: v.string(),
+    delta: v.number(),
+    reason: v.string(),
+    requestId: v.optional(v.id("aiRequests")),
+  }).index("by_user_week", ["userId", "weekKey"]),
+
+  /** A member disputing an "irrelevant" refusal; system admins decide. */
+  aiAppeals: defineTable({
+    requestId: v.id("aiRequests"),
+    userId: v.id("users"),
+    /** The chat for questions; the document for writing prompts. */
+    channelId: v.optional(v.id("channels")),
+    documentId: v.optional(v.id("documents")),
+    /** Snapshots, so the review still works after the chat's retention deletes the messages. */
+    question: v.string(),
+    reason: v.string(),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("denied")),
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    reviewNote: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_request", ["requestId"]),
+
+  /**
+   * Rules system admins teach the relevance filter, usually while reviewing an appeal. Every rule is
+   * sent with every filter call, so it applies to the next request as soon as it's saved.
+   */
+  aiFilterMemory: defineTable({
+    verdict: v.union(v.literal("allow"), v.literal("refuse")),
+    text: v.string(),
+    /** The appeal it was learned from, if any. */
+    appealId: v.optional(v.id("aiAppeals")),
+    createdBy: v.id("users"),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+  }).index("by_updatedAt", ["updatedAt"]),
+
+  /** A task or event 小飒 spotted in an AI chat; a person opens it in the task form to create or edit. */
+  aiSuggestions: defineTable({
+    channelId: v.id("channels"),
+    /** The chat message it came from, or the document whose summary proposed it. */
+    sourceMessageId: v.optional(v.id("messages")),
+    documentId: v.optional(v.id("documents")),
+    messageId: v.optional(v.id("messages")),
+    action: aiSuggestionAction,
+    assignmentId: v.optional(v.id("assignments")),
+    fields: v.object({
+      title: v.optional(v.string()),
+      description: v.optional(v.string()),
+      assigneeIds: v.optional(v.array(v.id("users"))),
+      dueAt: v.optional(v.number()),
+      startAt: v.optional(v.number()),
+      endAt: v.optional(v.number()),
+      location: v.optional(v.string()),
+    }),
+    status: v.union(v.literal("pending"), v.literal("applied"), v.literal("dismissed")),
+    actedBy: v.optional(v.id("users")),
+  })
+    .index("by_channel", ["channelId"])
+    .index("by_source", ["sourceMessageId"])
+    .index("by_document", ["documentId"]),
+
+  /**
+   * 小飒's summary of a document, shared with everyone who can read it and shown under it.
+   * One row per document; regenerating keeps the old content visible until the new one lands.
+   */
+  aiDocSummaries: defineTable({
+    documentId: v.id("documents"),
+    requestedBy: v.id("users"),
+    /** The request being generated right now, if any. */
+    pendingRequestId: v.optional(v.id("aiRequests")),
+    /** Set once a summary has been generated. */
+    generatedAt: v.optional(v.number()),
+    /** `documents.updatedAt` the summary was made from; newer edits mark it outdated. */
+    docUpdatedAt: v.optional(v.number()),
+    summary: v.string(),
+    tasks: v.array(
+      v.object({
+        kind: v.union(v.literal("task"), v.literal("event")),
+        title: v.string(),
+        description: v.optional(v.string()),
+        assigneeIds: v.array(v.id("users")),
+        dueAt: v.optional(v.number()),
+        startAt: v.optional(v.number()),
+        endAt: v.optional(v.number()),
+        location: v.optional(v.string()),
+        /** The draft created from this item. */
+        assignmentId: v.optional(v.id("assignments")),
+      }),
+    ),
+    announcements: v.array(
+      v.object({
+        body: v.string(),
+        sent: v.array(v.object({ channelId: v.id("channels"), messageId: v.id("messages"), by: v.id("users"), at: v.number() })),
+      }),
+    ),
+    edits: v.array(
+      v.object({
+        assignmentId: v.id("assignments"),
+        fields: v.object({
+          title: v.optional(v.string()),
+          description: v.optional(v.string()),
+          assigneeIds: v.optional(v.array(v.id("users"))),
+          dueAt: v.optional(v.number()),
+          startAt: v.optional(v.number()),
+          endAt: v.optional(v.number()),
+          location: v.optional(v.string()),
+        }),
+        suggestionId: v.optional(v.id("aiSuggestions")),
+      }),
+    ),
+    error: v.optional(v.string()),
+  }).index("by_document", ["documentId"]),
+
+  /** A private 小飒 writing result for one editor; applied through their editor, never written directly. */
+  aiDocDrafts: defineTable({
+    documentId: v.id("documents"),
+    userId: v.id("users"),
+    requestId: v.id("aiRequests"),
+    prompt: v.string(),
+    status: v.union(
+      v.literal("thinking"),
+      v.literal("streaming"),
+      v.literal("done"),
+      v.literal("refused"),
+      v.literal("failed"),
+      v.literal("closed"),
+    ),
+    text: v.string(),
+    /** Refusal reason, or the admin's note after a denied appeal. */
+    reason: v.optional(v.string()),
+    appealDenied: v.optional(v.boolean()),
+  })
+    .index("by_document_user", ["documentId", "userId"])
+    .index("by_request", ["requestId"]),
 
   auditLogs: defineTable({
     actorId: v.optional(v.id("users")),

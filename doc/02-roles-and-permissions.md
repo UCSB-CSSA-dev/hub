@@ -44,6 +44,7 @@ Every promotion asks the user to type an exact Chinese phrase before the confirm
 `{姓名}` is the Chinese name, falling back to the English name, Google name, then email (for pre-approvals, the email).
 - **System admin is a superset of presidium.** Anywhere these docs say "presidium can ...", the system admin can too, even without being in the presidium department. On top of that, only a system admin can grant or remove system admin from another user, and presidium cannot demote or deactivate a system admin. There must always be at least one system admin.
 - The system admin is a technical role (the person running the app). They may also hold a normal place in the hierarchy, for example as a member of 主席团 or a department.
+- **Labels follow membership, not permissions.** A system admin is shown as "系统管理员 / System admin" (chat member list, managers of a taken-over group, the role 小飒 is told), and as 主席团 only if they're actually in 主席团, in which case both labels show. 小飒 credits follow the same rule: a system admin is unlimited whether or not they're in 主席团.
 - **Admin** in these docs means "system admin or presidium".
 - Account status (`new`, `pending`, `approved`, `rejected`, `deactivated`) gates everything. Only `approved` users can use the app. See [features/accounts-and-onboarding.md](features/accounts-and-onboarding.md).
 
@@ -168,6 +169,7 @@ Implemented by `channelAccess` in `backend/convex/lib/channels.ts`. Through over
 | --- | --- | --- | --- |
 | Read own channels (as participant) | Y | Y | Y |
 | Read any DM, group, or department channel | O | O for chats with a 部员 they lead | N |
+| Read someone's private 小飒 chat | O | O for 部员 they lead | N (only their own) |
 | Create a group chat | Y (any departments, or none) | Y (must include a department they lead) | N: propose one instead |
 | Approve or reject a group proposal | Y | Dept (an involved department) | N |
 | Manage a group (rename, add or remove departments, end) | Y if a member, or during a takeover | Dept (an involved department) | N |
@@ -212,6 +214,33 @@ A task belongs to one chat. Details: [features/assignments.md](features/assignme
 | Submit, mark done, comment on own submission | Y | Y | Y |
 | See all submissions and comments on a task | Y | Tasks in chats they could create in | N |
 
+### AI assistant (小飒)
+
+Implemented in `backend/convex/ai.ts` and `backend/convex/lib/ai/`. Details: [features/ai-assistant.md](features/ai-assistant.md). System admins (SA) are listed separately because they differ from 主席团 here.
+
+| Action | System admin | Presidium | Lead | Member |
+| --- | --- | --- | --- | --- |
+| Switch AI mode on or off (全体, department and group chats they take part in; never DMs) | Y | Y | N | N |
+| Ask `@小飒` in a chat with AI mode on (as a participant) | Y | Y | Y | Y |
+| Private chat with 小飒 | Y | Y | Y | Y |
+| Weekly credits | Unlimited | 25 | 15 | 5 |
+| Apply or dismiss a task suggestion card | Same as creating a task in that chat (`canCreateTaskIn`), or reviewing the task for edits (`taskAccess.review`) | | | |
+| Appeal a refusal of their own question or writing prompt (once, within 7 days) | Y | Y | Y | Y |
+| Review appeals, see usage at /admin/ai | Y | N | N | N |
+| Teach 小飒's relevance filter (add, edit, delete rules; save one while reviewing an appeal) | Y | N | N | N |
+| Attach documents to a question | Documents they can read; in shared chats only ones everyone there can open (`docSharedIn`) | | | |
+| Generate a document's summary (1 credit), see it | Anyone who can read the document | | | |
+| Create drafts from the summary's tasks and events | `canCreateTaskIn` for the document's chat (or, for Files documents, the chat they pick) | | | |
+| Send an announcement found in the summary | Chats where they may announce (`canAnnounce`), or group chats with AI mode on that they manage (posted by 小飒 on their behalf) | | | |
+| Apply a task change found in the summary | Reviewers of that task (`taskAccess.review`), while it's open | | | |
+| Ask 小飒 to write in a document (2 credits) | Anyone who can edit the document (`canEdit`) | | | |
+| Dictate into a document (no 小飒, free) | Anyone who can edit the document | | | |
+
+- **The model only sees what the asker could read as a participant.** Context is built from chats where the asker's access is `via: "member"`, filtered to messages sent while AI mode was on (`aiReadable`). Content the asker can read only through oversight is never sent, and tasks are filtered by `taskAccess`.
+- 小飒 is a bot user (`isBot: true`, no status). It never counts as a member, can't be added to chats, DMs or tasks, and doesn't appear on the roster.
+- **Documents follow document access.** A summary, writing prompt or attached document is checked with `documentAccessFor` when requested and again when the model is called. A summary is visible to everyone who can read the document, so its context only uses what the document's own audience can see: the chat's members and open tasks for chat and task documents, nothing beyond the document for Files documents. In shared chats, attached documents must be readable by everyone in the chat, so an answer can't leak a document to members who couldn't open it.
+- **小飒 never edits on its own.** Drafts from a summary are private to their creator until published; task changes go through the normal task form; writing results are applied by the editor through the collaborative editor.
+
 ## Signup disclosure (必须同意)
 
 Shown on the onboarding page before an account can be submitted for approval. The user must check a box to continue. Store `oversightConsentAt` and `oversightConsentVersion` on the user. If the text changes, bump the version and ask existing users to accept again on next login.
@@ -229,6 +258,10 @@ Shown on the onboarding page before an account can be submitted for approval. Th
 >
 > ☐ 我已阅读并同意以上说明
 
+Version 3 (Stage 4) adds this bullet under 消息与文件:
+
+> - 主席团可以为工作聊天开启 AI 模式（聊天顶部会显示小飒）。开启后发送的消息会通过 UCSB 的 AI 服务处理，用于回答 @小飒 的问题和建议任务；你和小飒的私聊也会这样处理，并像私信一样受监督。你让小飒总结、写作或提问时附上的文档也会这样处理。文档听写由浏览器完成（Chrome 会把音频发送到 Google）。
+
 **English:**
 
 > **Privacy and Oversight Notice**
@@ -241,5 +274,11 @@ Shown on the onboarding page before an account can be submitted for approval. Th
 > - Please do not share personal or sensitive information unrelated to CSSA work on this platform.
 >
 > ☐ I have read and agree to the notice above
+
+Version 3 adds:
+
+> - The presidium can switch on AI mode in work chats (Sasa then shows at the top of the chat). Messages sent while it's on are processed by UCSB's AI service to answer @Sasa questions and suggest tasks; your private chat with Sasa is processed the same way and is overseeable like a DM. Documents you have Sasa summarize, write in, or answer questions about are processed the same way. Document dictation is done by your browser (Chrome sends the audio to Google).
+
+The current version is `CURRENT_CONSENT_VERSION` in `backend/convex/lib/constants.ts` (3). The full current text, including the Stage 2 data bullets, is in `frontend/messages/*.json` under `onboarding.notice*`.
 
 The same notice is always available under **Settings, then "Who can see my content"**. That page lists the current users who oversee the viewer, computed from `oversees`.

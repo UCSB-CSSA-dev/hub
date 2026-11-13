@@ -42,7 +42,8 @@
     "notifications": "通知",
     "admin": "管理",
     "adminOverview": "概览",
-    "auditLog": "审计日志"
+    "auditLog": "审计日志",
+    "sasa": "小飒"
   },
   "errors": {
     "UNAUTHENTICATED": "请先登录。",
@@ -67,6 +68,10 @@
     "FILE_TYPE_BLOCKED": "出于安全考虑，不能上传这种类型的文件。",
     "DRIVE_NOT_CONFIGURED": "大文件需要存到 Google Drive，但还没有连接 Apps Script，请联系主席团。",
     "DRIVE_FAILED": "上传到 Google Drive 失败，请稍后再试。",
+    "AI_NO_CREDITS": "本周的小飒额度已用完",
+    "AI_BUSY": "小飒还在回答你的上一个问题",
+    "AI_NOT_ENABLED": "这个聊天没有开启 AI 模式",
+    "AI_NOT_CONFIGURED": "小飒暂未启用",
     "invalid": {
       "title": "请填写标题（最多 120 个字符）。",
       "description": "说明太长了。",
@@ -79,7 +84,9 @@
       "fileIds": "有附件已被删除或不在这个任务的文件夹里，请移除后重试。",
       "status": "任务状态已变化，请刷新页面后重试。",
       "name": "名称不能为空。",
-      "link": "链接需要以 http:// 或 https:// 开头。"
+      "link": "链接需要以 http:// 或 https:// 开头。",
+      "rule": "规则不能为空，最多 300 个字符。",
+      "memory_full": "小飒的记忆已满（最多 60 条），请先删除旧规则。"
     }
   },
   "signIn": {
@@ -93,7 +100,7 @@
   },
   "privacy": {
     "title": "隐私政策",
-    "updated": "最后更新：2026 年 10 月 19 日",
+    "updated": "最后更新：2026 年 11 月 13 日",
     "intro": "CSSA Hub 是加州大学圣塔芭芭拉分校中国学生学者联合会（UCSB CSSA）的内部工作平台，仅供 CSSA 成员使用。本政策说明我们收集哪些信息以及如何使用。",
     "collectTitle": "我们收集的信息",
     "collectGoogle": "通过 Google 登录时获取的姓名、@ucsb.edu 邮箱地址和头像。我们只请求基本的个人资料和邮箱权限，不会访问你的 Gmail、Google Drive 或其他 Google 数据。",
@@ -103,6 +110,8 @@
     "useBody": "以上信息用于登录验证、组织架构展示、成员审批和 CSSA 内部沟通。你的头像、中英文名和个人简介属于公开资料，会展示在 CSSA 对外公开的网站上。除此之外，我们不会出售、出租或与 CSSA 以外的任何第三方分享你的信息，也不会将其用于广告。",
     "oversightTitle": "管理员查看",
     "oversightBody": "主席团可以查看平台上的所有内容；部长可以查看其部门成员发送的消息和上传的内容。此规定会在注册时明确告知并需要你同意，所有查看行为都会记录在审计日志中。",
+    "aiTitle": "AI 助手小飒",
+    "aiBody": "只有在开启了 AI 模式的聊天（聊天顶部会显示小飒）里，开启后发送的消息才会被发送到 UCSB 文理学院（L&S）运营的 AI 服务，用于回答 @小飒 的问题和建议任务；你在私聊中问小飒的问题，以及回答所需的你的任务、活动和集会信息，也会这样处理。你让小飒总结或写作的文档、提问时附上的文档（在共享聊天里只能附上聊天里每个人都能打开的文档）也会发送到同一服务。小飒只会读取你本人参与的聊天，不会读取你只能通过监督权限看到的内容。我们不会把这些内容发送给其他 AI 服务。小飒的回答和你的提问会像普通消息一样保存并按保留期限删除；文档摘要保存在文档里，随文档删除；写作草稿只有你能看到，7 天后删除。文档的听写功能不经过小飒，由你的浏览器识别语音：Chrome 和 Edge 会把音频发送到 Google 或 Microsoft 的语音服务，Safari 可能在设备上识别。",
     "storageTitle": "存储与安全",
     "storageBody": "数据存储在 Convex（convex.dev）云服务上，传输全程加密。只有通过审批的 CSSA 成员才能访问平台。聊天消息默认 15 天后自动删除，管理员或部长可以为某个聊天延长保留期限（最长一年）。上传的文件最大 15 MB，发送 15 天后自动删除；在此之前，文件链接无需登录即可打开，持有链接的人都能访问。",
     "deleteTitle": "账号停用与删除",
@@ -136,7 +145,8 @@
     "noticeFiles": "上传的文件和图片最大 15 MB，发送 15 天后自动删除。文件链接无需登录即可打开，请勿转发给他人。",
     "noticeProfile": "头像、中英文名和个人简介是公开资料，会展示在 CSSA 对外网站上。",
     "updatedTitle": "隐私说明已更新",
-    "updatedSubtitle": "我们新增了聊天、文件和监督相关的说明。请重新阅读并同意后继续使用。"
+    "updatedSubtitle": "我们新增了 AI 助手小飒的说明。请重新阅读并同意后继续使用。",
+    "noticeAi": "主席团可以为工作聊天开启 AI 模式（聊天顶部会显示小飒）。开启后发送的消息会通过 UCSB 的 AI 服务处理，用于回答 @小飒 的问题和建议任务；你和小飒的私聊也会这样处理，并像私信一样受监督。你让小飒总结、写作或提问时附上的文档也会这样处理。文档听写由浏览器完成（Chrome 会把音频发送到 Google）。"
   },
   "pending": {
     "title": "等待审批",
@@ -311,7 +321,10 @@
       "doc": "[文档]",
       "attachment": "[附件]",
       "announcement": "[公告]",
-      "yesterday": "昨天"
+      "yesterday": "昨天",
+      "pinned": "置顶",
+      "aiOn": "AI 模式已开启",
+      "ai": "[小飒]"
     },
     "members": {
       "title": "聊天成员",
@@ -319,8 +332,17 @@
       "search": "搜索成员",
       "presidium": "主席团",
       "lead": "部长",
-      "none": "没有找到成员"
-    }
+      "none": "没有找到成员",
+      "systemAdmin": "系统管理员"
+    },
+    "sasa": "小飒",
+    "aiTag": "AI",
+    "aiModeOn": "开启 AI 模式",
+    "aiModeOff": "关闭 AI 模式",
+    "close": "关闭",
+    "sasaChat": "小飒",
+    "sasaChatOf": "{owner} · 小飒",
+    "sasaIntro": "你的 AI 助手：任务、截止日期、活动一问便知"
   },
   "roster": {
     "title": "组织架构",
@@ -551,7 +573,9 @@
     "retentionChanged": "{actor} 将消息保留期限改为 {days} 天",
     "appStarted": "{actor} 发起了{kind}「{title}」",
     "meetingConfirmed": "集会「{title}」时间已确定：{day} {time}",
-    "unknown": "系统消息"
+    "unknown": "系统消息",
+    "aiEnabled": "{actor} 开启了 AI 模式，之后的消息可以被小飒读取",
+    "aiDisabled": "{actor} 关闭了 AI 模式"
   },
   "notifications": {
     "title": "通知",
@@ -597,7 +621,10 @@
     "submissionCompleted": "{actor} 把你的「{title}」标记为已完成",
     "assignmentComment": "{actor} 评论了「{title}」",
     "docMention": "{actor} 在文档「{title}」中提到了你",
-    "taskMention": "{actor} 在{kind}「{title}」中提到了你"
+    "taskMention": "{actor} 在{kind}「{title}」中提到了你",
+    "aiAppeal": "{actor} 对小飒的拒绝提出了申诉",
+    "aiAppealApproved": "你的申诉已通过，小飒会回答你的问题",
+    "aiAppealDenied": "你的申诉未通过"
   },
   "groups": {
     "status": {
@@ -669,7 +696,8 @@
     "leaveBody": "退出后你将看不到此群聊的消息，需要部长重新邀请才能加入。",
     "end": "结束群聊",
     "endTitle": "结束群聊？",
-    "endBody": "结束后群聊变为只读，消息会按保留期限删除。此操作无法撤销。"
+    "endBody": "结束后群聊变为只读，消息会按保留期限删除。此操作无法撤销。",
+    "systemAdminManagers": "系统管理员："
   },
   "apps": {
     "kind": {
@@ -847,7 +875,10 @@
       "group_end": "结束群聊",
       "channel_retention_change": "修改消息保留期限",
       "message_moderate_remove": "移除了消息",
-      "oversight_channel_open": "以监督身份打开聊天"
+      "oversight_channel_open": "以监督身份打开聊天",
+      "channel_ai_mode": "切换了 AI 模式",
+      "ai_appeal_review": "审核了小飒申诉",
+      "ai_memory_change": "修改了小飒的记忆"
     },
     "openTasks": "进行中的任务",
     "overdueTasks": "逾期未完成",
@@ -1112,7 +1143,9 @@
     "markComplete": "标记完成",
     "markedCompleteToast": "已标记为完成",
     "markCompleteHint": "不需要对方提交，直接记为完成。之后仍可要求修改。",
-    "completedWithoutSubmission": "未提交，已由负责人标记为完成。"
+    "completedWithoutSubmission": "未提交，已由负责人标记为完成。",
+    "fromSasa": "已根据小飒的建议填写，保存前请检查一遍。",
+    "sasaAdds": "保存时添加："
   },
   "docs": {
     "title": "文档",
@@ -1170,7 +1203,21 @@
     "chatDocsBody": "这个聊天里创建的所有协作文档，聊天记录过期后也会保留在这里。",
     "chatCardLabel": "协作文档",
     "editedAt": "编辑于 {time}",
-    "cardGone": "文档已删除"
+    "cardGone": "文档已删除",
+    "dictation": "听写",
+    "dictationStop": "停止听写",
+    "dictationHint": "边说边把你说的话转成文字，追加到文档末尾。语音由浏览器识别，不使用小飒，不消耗额度。",
+    "dictationUnsupported": "这个浏览器不支持语音识别，请使用 Chrome、Edge 或 Safari。",
+    "dictationLanguage": "听写语言",
+    "dictationListening": "正在听…",
+    "dictationPrivacy": "语音由浏览器识别；Chrome 和 Edge 会把音频发送到 Google 或 Microsoft 的语音服务处理。",
+    "dictationDenied": "无法使用麦克风，请在浏览器设置里允许麦克风权限。",
+    "dictationError": "语音识别出错了，请再试一次。",
+    "startWith": "开始方式",
+    "startBlank": "空白文档",
+    "startListen": "边听边记",
+    "startSasa": "让小飒起草",
+    "startListenHint": "创建后马上开始听写，把会议内容转成文字；之后可以让小飒整理成会议纪要。语音由浏览器识别（Chrome 会发送到 Google）。"
   },
   "about": {
     "navAbout": "关于我们",
@@ -1218,5 +1265,205 @@
     "memberCount": "{count} 人",
     "privacy": "隐私政策",
     "photoCredits": "校园照片来自 Wikimedia Commons："
+  },
+  "ai": {
+    "welcome": "你好，我是小飒！可以问我你的任务、截止日期、活动和集会，或者开启了 AI 模式的聊天里大家聊过什么，也可以一起头脑风暴 CSSA 的点子。",
+    "welcomeHint": "每个问题消耗 1 点额度，额度每周日早上 8 点（太平洋时间）刷新。和 CSSA 无关的请求（比如作业、课业）不会回答。",
+    "appealDeniedNotice": "这不是小飒该处理的事",
+    "adminNote": "管理员备注：{note}",
+    "thinking": "小飒正在思考",
+    "failed": "小飒暂时无法回答，本次额度已退还。请稍后再试。",
+    "refusedTitle": "小飒只回答和 CSSA 工作有关的问题",
+    "refusedCost": "无关的问题共消耗 {cost} 点额度。如果你认为判断有误，可以提出申诉。",
+    "appealStatus": {
+      "pending": "申诉已提交，等待系统管理员审核",
+      "approved": "申诉已通过，额度已退还",
+      "denied": "申诉未通过"
+    },
+    "appeal": "申诉",
+    "appealSent": "申诉已提交",
+    "appealTitle": "对小飒的拒绝提出申诉",
+    "appealBody": "系统管理员会查看你的问题。通过后退还 2 点额度，小飒会免费回答这个问题；未通过则不退还。每个问题只能申诉一次，7 天内有效。",
+    "appealPlaceholder": "说明这个问题和 CSSA 工作有什么关系（可选）",
+    "appealSubmit": "提交申诉",
+    "cancel": "取消",
+    "suggestionGone": "这条建议已失效",
+    "field": {
+      "title": "标题",
+      "assignees": "负责人",
+      "helpers": "帮手",
+      "due": "截止",
+      "start": "开始",
+      "end": "结束",
+      "location": "地点",
+      "description": "说明"
+    },
+    "suggestTask": "建议创建任务",
+    "suggestEvent": "建议创建活动",
+    "suggestEdit": "建议修改「{title}」",
+    "actionTask": "创建任务",
+    "actionEvent": "创建活动",
+    "actionEdit": "修改任务",
+    "dismiss": "忽略",
+    "suggestionApplied": "已采纳",
+    "suggestionDismissed": "已忽略",
+    "suggestionWho": "可以在这个聊天里布置任务的人才能采纳",
+    "modeOn": "AI 模式已开启",
+    "modeBadge": "AI",
+    "modeReadable": "这个聊天开启了 AI 模式：开启后发送的消息可以被大语言模型（LLM）读取，用于回答 @小飒 的问题和建议任务。开启前的消息不会被读取。",
+    "modeHowTo": "在消息里 @小飒 就可以提问，每个问题消耗 1 点额度。",
+    "modeEnabled": "已开启 AI 模式",
+    "modeDisabled": "已关闭 AI 模式",
+    "enableTitle": "开启 AI 模式？",
+    "disableTitle": "关闭 AI 模式？",
+    "enableBody": "开启后，这个聊天里新发送的消息会被小飒（大语言模型）读取。聊天顶部会一直显示小飒，提醒所有人。",
+    "disableBody": "关闭后，新消息不会再被小飒读取，也不能再 @小飒 提问。",
+    "enablePoint1": "成员可以 @小飒 提问，比如之前讨论了什么、群里有哪些任务和活动。",
+    "enablePoint2": "小飒会留意布置任务和修改任务的消息，并给出一键创建或修改的建议。",
+    "enablePoint3": "开启前的消息不会被读取；内容通过 UCSB 的 AI 服务处理。",
+    "enable": "开启",
+    "disable": "关闭",
+    "creditsUnlimited": "无限额度",
+    "creditsLeft": "{balance}/{allowance}",
+    "creditsTitle": "本周额度",
+    "creditsRules": "每个问题消耗 1 点额度；无关的问题共消耗 2 点，可以申诉。回答失败会自动退还。",
+    "creditsReset": "下次刷新：{when}",
+    "placeholder": "问问小飒…",
+    "notConfigured": "小飒暂未启用",
+    "noCredits": "本周的额度已用完，周日早上 8 点（太平洋时间）刷新",
+    "waiting": "小飒还在回答上一个问题",
+    "askHint": "这条消息会发给小飒，消耗 1 点额度（剩余 {balance} 点）",
+    "askHintUnlimited": "这条消息会发给小飒",
+    "open": "打开小飒",
+    "chatTitle": "小飒",
+    "close": "关闭",
+    "onBehalfOf": "小飒代 {name} 发布",
+    "attachedDoc": "提问时给小飒的文档",
+    "docAttach": "附上文档",
+    "docRemove": "移除文档",
+    "docSearch": "搜索文档标题",
+    "docSharedHint": "这里只能附上聊天里每个人都能打开的文档：本聊天的文档、本聊天任务的文档和文件里非主席团空间的文档。",
+    "docPrivateHint": "可以附上任何你能打开的文档，最多 3 个。",
+    "docLoading": "正在加载…",
+    "docNone": "没有可附上的文档",
+    "docWhere": {
+      "chat": "聊天文档",
+      "task": "任务文档",
+      "file": "文件"
+    },
+    "docBalance": "（剩余 {balance} 点）",
+    "writeButton": "小飒写作",
+    "writeTitle": "让小飒写",
+    "writeBody": "说说你想要什么。小飒会读当前文档，写好后先给你预览，由你决定替换、插入还是追加。",
+    "writePresetLabel": {
+      "notes": "整理会议纪要",
+      "brainstorm": "头脑风暴",
+      "polish": "润色",
+      "outline": "提炼要点"
+    },
+    "writePreset": {
+      "notes": "把文档里的记录（可能是语音转写）整理成会议纪要：议题、讨论要点、决定和待办（谁、什么时候）。",
+      "brainstorm": "围绕这份文档的主题，为 CSSA 头脑风暴 10 个具体可行的活动点子，每个附一句说明。",
+      "polish": "润色全文，让表达更清楚、更有条理，不要改变原意。",
+      "outline": "提炼这份文档的要点，并列出所有待办事项。"
+    },
+    "writePlaceholder": "例如：把这段转写整理成会议纪要",
+    "writeCost": "消耗 {cost} 点额度；与 CSSA 无关的请求会被拒绝（可以申诉）。",
+    "writeSubmit": "开始写",
+    "draftTitle": "小飒写的草稿（只有你能看到）",
+    "draftApplied": "已写入文档，可以撤销",
+    "draftAppend": "追加到末尾",
+    "draftInsert": "插入到光标处",
+    "draftReplace": "替换全文",
+    "draftDiscard": "放弃",
+    "summaryTitle": "小飒摘要",
+    "summaryBy": "{name} 生成于 {time}",
+    "summaryGenerate": "生成摘要",
+    "summaryRegenerate": "重新生成",
+    "summaryCost": "每次生成消耗 {cost} 点额度。",
+    "summaryWorking": "小飒正在读文档",
+    "summaryWorkingOther": "有人正在让小飒更新摘要",
+    "summaryFailed": "上次生成失败，额度已退还。",
+    "summaryOutdated": "文档在摘要之后有改动",
+    "summaryShared": "摘要保存在文档里，能打开这份文档的人都能看到。",
+    "summaryEmpty": "让小飒总结这份文档，并找出其中的任务、活动、需要发的公告和对现有任务的改动。",
+    "foundTasks": "任务和活动（{count}）",
+    "pickChat": "选择聊天",
+    "createAllDrafts": "全部创建为草稿（{count}）",
+    "createDraft": "创建草稿",
+    "draftCreated": "已创建草稿",
+    "draftsCreated": "已创建 {count} 个草稿，发布前不会通知任何人",
+    "draftsHint": "草稿不会通知任何人，发布前可以修改。",
+    "tasksWho": "只有能在相应聊天创建任务的人（部长、主席团）可以创建。",
+    "foundAnnouncements": "需要发的公告（{count}）",
+    "announcementSend": "发送公告",
+    "announcementSent": "已发送到 {chat}",
+    "announcementSentTo": "{name} 已发送到 {chat}（{time}）",
+    "announceViaSasa": "这个聊天开启了 AI 模式，将由小飒代你发布",
+    "announceWho": "只有能在聊天里发公告的人（部长、主席团，或开启 AI 模式的群聊的管理者）可以发送。",
+    "foundEdits": "对现有任务的改动（{count}）",
+    "editsWho": "只有任务的负责人可以修改。"
+  },
+  "aiAdmin": {
+    "back": "返回",
+    "title": "小飒",
+    "forbidden": "只有系统管理员可以查看此页面。",
+    "appeals": "申诉",
+    "appealsHint": "成员认为小飒错误拒绝了问题时可以申诉。通过：退还 2 点额度，小飒免费回答；未通过：小飒回复“这不是小飒该处理的事”。",
+    "status": {
+      "pending": "待审核",
+      "approved": "已通过",
+      "denied": "未通过"
+    },
+    "empty": {
+      "pending": "没有待审核的申诉",
+      "approved": "没有已通过的申诉",
+      "denied": "没有未通过的申诉"
+    },
+    "approved": "已通过申诉",
+    "denied": "已驳回申诉",
+    "privateChat": "私聊小飒",
+    "reason": "拒绝原因",
+    "note": "申诉说明",
+    "reviewedBy": "审核人",
+    "reviewNote": "审核备注",
+    "notePlaceholder": "备注（可选，会告知申诉人）",
+    "approve": "通过",
+    "deny": "驳回",
+    "decisionHint": "审核结果会通知申诉人，并记录在审计日志中。",
+    "notConfigured": "Convex 部署上还没有设置 AI_API_KEY，小飒目前无法使用。",
+    "usage": "本周用量",
+    "usageHint": "额度将于 {reset} 刷新。",
+    "person": "成员",
+    "questions": "提问",
+    "refused": "被拒",
+    "credits": "消耗额度",
+    "noUsage": "本周还没有人提问",
+    "chats": "开启 AI 模式的聊天",
+    "chatsHint": "这些聊天里的新消息可以被小飒读取。",
+    "noChats": "目前没有聊天开启 AI 模式",
+    "documentPrompt": "文档写作：{title}",
+    "remember": "记住这个判断，让小飒以后遇到类似请求也这样处理",
+    "rule": "规则",
+    "rulePlaceholder": "例如：为 CSSA 活动出的知识竞赛题",
+    "rememberHint": "通过会记为“应该回答”，驳回会记为“不该回答”。保存后立即生效，之后每个人的提问都会参考它。请写成概括性的规则，不要包含个人信息。",
+    "memory": "小飒的记忆",
+    "memoryHint": "系统管理员教给小飒的判断规则（{count}/{max}），优先于默认规则。每次判断请求是否与 CSSA 相关时都会读取，修改立即生效。",
+    "memoryFull": "规则已满，请先删除或合并旧规则。",
+    "verdict": {
+      "allow": "应该回答",
+      "refuse": "不该回答"
+    },
+    "addRule": "添加",
+    "noRules": "还没有规则。审核申诉时勾选“记住这个判断”，或在上面直接添加。",
+    "ruleFromAppeal": "来自申诉 · {name} · {time}",
+    "ruleManual": "{name} · {time}",
+    "editRule": "编辑规则",
+    "removeRule": "删除规则",
+    "ruleAdded": "已添加规则",
+    "ruleSaved": "已保存规则",
+    "ruleRemoved": "已删除规则",
+    "save": "保存",
+    "cancel": "取消"
   }
 }

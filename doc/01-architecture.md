@@ -19,6 +19,7 @@ flowchart LR
     AppsScript["Apps Script Web App"]
     Gmail["Gmail"]
   end
+  UcsbAI["UCSB L&S AI service"]
 
   Next -->|"useQuery subscriptions, useMutation"| Fns
   Next -->|"upload via signed URL"| Storage
@@ -29,6 +30,7 @@ flowchart LR
   Scheduler --> Fns
   Fns -->|"action: HTTPS POST + shared secret"| AppsScript
   AppsScript -->|"GmailApp.sendEmail"| Gmail
+  Fns -->|"action: chat/completions (Stage 4)"| UcsbAI
 ```
 
 ### Why this shape
@@ -36,6 +38,7 @@ flowchart LR
 - **Convex** gives real-time subscriptions out of the box, which chat needs. It also covers the database, file storage, scheduled jobs, and server functions, so no separate backend server is required.
 - **Next.js** hosts the UI only. It does not hold business logic. All reads and writes go through Convex functions, where permission checks run. It is built as a static export and served from GitHub Pages, so there is no Next.js server at runtime.
 - **Google Apps Script** sends email from a CSSA Gmail account for free, without a paid email provider. Convex calls it over HTTPS. See [06-email-apps-script.md](06-email-apps-script.md).
+- **The UCSB L&S AI service** powers the assistant 小飒. Only Convex actions call it, with the key held in Convex environment variables; streamed answers are written back into the chat message by mutations, so clients see them through the normal subscriptions. See [features/ai-assistant.md](features/ai-assistant.md).
 
 ## Frontend
 
@@ -60,6 +63,7 @@ URLs have no locale segment; the language is a client-side setting (see [05-i18n
 | `/notifications/` | 2 | approved | Notification list |
 | `/admin/` | 2 | lead or admin | Admin overview |
 | `/admin/audit/` | 2 | admin | Audit log viewer |
+| `/admin/ai/` | 4 | system admin | 小飒 appeals, weekly usage, chats with AI mode on |
 | `/files/?f=<folderId>` | 3 | approved, can read folder | Files root, or a folder view |
 | `/assignments/` | 3 | approved | "Assigned to me" and (for leads) "Assigned by me" |
 | `/assignments/new/` | 3 | lead or admin | Create assignment |

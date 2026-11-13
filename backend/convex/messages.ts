@@ -2,6 +2,8 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { maybeScan, prepareQuestion, startAnswer } from "./lib/ai/flow";
+import { aiReadableChannel } from "./lib/ai/sasa";
 import { logAudit } from "./lib/audit";
 import {
   channelAudience,
@@ -11,6 +13,7 @@ import {
   type ChannelAccess,
 } from "./lib/channels";
 import { LIMITS, REACTIONS } from "./lib/constants";
+import { canReadDocument, docSharedIn } from "./lib/documents";
 import { appError } from "./lib/errors";
 import { loadSpace, spaceAccess } from "./lib/files";
 import {
@@ -182,6 +185,8 @@ export const send = mutation({
     /** Files shared from Files; the viewer must be able to see each one. */
     fileIds: v.optional(v.array(v.id("files"))),
     announcement: v.optional(v.boolean()),
+    /** Documents for 小飒 to read with a question (only allowed on questions to 小飒). */
+    documentIds: v.optional(v.array(v.id("documents"))),
   },
   handler: async (ctx, args) => {
     const viewer = await requireApproved(ctx);
@@ -189,6 +194,10 @@ export const send = mutation({
     requirePost(access);
     const announcement = args.announcement === true;
     if (announcement && !access.canAnnounce) throw appError("FORBIDDEN");
+    const assistant = channel.type === "assistant";
+    if (assistant && ((args.attachmentIds?.length ?? 0) > 0 || (args.fileIds?.length ?? 0) > 0)) {
+      throw appError("INVALID", "attachments");
+    }
 
     const attachmentIds = [...new Set(args.attachmentIds ?? [])];
     if (attachmentIds.length > LIMITS.attachmentsPerMessage) throw appError("INVALID", "attachments");
@@ -220,6 +229,22 @@ export const send = mutation({
       }
     }
 
+    const question = await prepareQuestion(ctx, viewer, channel, body);
+    const documentIds = [...new Set(args.documentIds ?? [])];
+    // Replying to a document card asks about that document.
+    if (question && replyTo?.kind === "doc" && replyTo.documentId && !documentIds.includes(replyTo.documentId)) {
+      documentIds.push(replyTo.documentId);
+    }
+    if (documentIds.length > 0 && !question) throw appError("INVALID", "documentIds");
+    if (documentIds.length > LIMITS.aiDocsPerQuestion) throw appError("INVALID", "documentIds");
+    for (const documentId of documentIds) {
+      const doc = await ctx.db.get("documents", documentId);
+      const allowed =
+        doc !== null &&
+        (await canReadDocument(ctx, viewer, doc._id)) &&
+        (assistant || (await docSharedIn(ctx, doc, channel)));
+      if (!allowed) throw appError("INVALID", "documentIds");
+    }
     const mentionIds = await validMentions(ctx, viewer, channel, body);
     const mentionAll = parseMentions(body).all && access.canMentionAll;
     const now = Date.now();
@@ -228,12 +253,14 @@ export const send = mutation({
       authorId: viewer.user._id,
       body,
       kind: "user",
+      aiReadable: aiReadableChannel(channel) || undefined,
       mentionUserIds: mentionIds,
       mentionAll,
       replyToId: replyTo?._id,
       announcement: announcement || undefined,
       searchText: toSearchText(body),
       fileIds: fileIds.length > 0 ? fileIds : undefined,
+      aiDocumentIds: documentIds.length > 0 ? documentIds : undefined,
     });
     const expiresAt = now + LIMITS.attachmentRetentionDays * 24 * 60 * 60 * 1000;
     for (const attachment of attachments) {
@@ -241,16 +268,30 @@ export const send = mutation({
     }
     await ctx.db.patch("channels", channel._id, { lastMessageAt: now });
     await touchReadState(ctx, channel._id, viewer.user._id, now);
-    await notifyForMessage(ctx, {
-      viewer,
-      channel,
-      messageId,
-      body,
-      mentionIds,
-      mentionAll,
-      replyTo,
-      announcement,
-    });
+    if (!assistant) {
+      await notifyForMessage(ctx, {
+        viewer,
+        channel,
+        messageId,
+        body,
+        mentionIds,
+        mentionAll,
+        replyTo,
+        announcement,
+      });
+    }
+    if (question) {
+      await startAnswer(ctx, {
+        userId: viewer.user._id,
+        channel,
+        questionMessageId: messageId,
+        source: assistant ? "private" : "mention",
+        weekKey: question.weekKey,
+        cost: 1,
+      });
+    } else {
+      await maybeScan(ctx, channel, messageId, body);
+    }
     return messageId;
   },
 });
@@ -441,7 +482,10 @@ export const forward = mutation({
     const messages: Doc<"messages">[] = [];
     for (const id of messageIds) {
       const message = await ctx.db.get("messages", id);
-      const card = message?.kind === "task" || message?.kind === "doc";
+      const card =
+        message?.kind === "task" ||
+        message?.kind === "doc" ||
+        (message?.kind === "ai" && (message.ai?.status !== "done" || message.ai.suggestionId !== undefined));
       if (!message || message.channelId !== source._id || !isLiveUserContent(message) || card) {
         throw appError("INVALID", "messageIds");
       }
@@ -487,6 +531,7 @@ export const forward = mutation({
     const sent: Id<"messages">[] = [];
     for (const targetId of targetIds) {
       const { channel: target, access: targetAccess } = await requireChannelAccess(ctx, viewer, targetId);
+      if (target.type === "assistant") throw appError("INVALID", "targetChannelIds");
       requirePost(targetAccess);
       const searchText = toSearchText(items.map((item) => item.body).join(" "));
       sent.push(
