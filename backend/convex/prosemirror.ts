@@ -1,4 +1,5 @@
 import type { DataModel } from "./_generated/dataModel";
+import { snapshotText } from "./lib/docText";
 import { documentAccess, prosemirrorSync, recordDocumentMentions } from "./lib/documents";
 import { appError } from "./lib/errors";
 
@@ -14,7 +15,11 @@ export const { getSnapshot, submitSnapshot, latestVersion, getSteps, submitSteps
     },
     onSnapshot: async (ctx, id, snapshot) => {
       const access = await documentAccess(ctx, id);
-      await ctx.db.patch("documents", access.doc._id, { updatedAt: Date.now(), updatedBy: access.viewer.user._id });
+      await ctx.db.patch("documents", access.doc._id, {
+        updatedAt: Date.now(),
+        updatedBy: access.viewer.user._id,
+        text: snapshotText(snapshot),
+      });
       await recordDocumentMentions(ctx, access, snapshot);
     },
   });

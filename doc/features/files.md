@@ -99,6 +99,7 @@ To save Convex bandwidth, a file's bytes are fetched once and kept in the browse
 - It is a `files` row with `documentId` (type `text/markdown`, size 0), so it shows in the folder, search, move, trash and restore like any file, and doesn't use quota. Opening it goes to the editor instead of the preview; there is no download (export from the editor instead).
 - Anyone who can upload in the space (or the author, inside a task folder) can edit it. Renaming and deleting follow the file rules: the author or a manager. Deleting moves it to the trash; purging deletes the content.
 - @mentions suggest everyone who can see the space (主席团 members for 主席团).
+- Dictation and 小飒 work as in task documents ([ai-assistant.md](ai-assistant.md#document-summaries)). Tasks found in a Files document's summary are created as drafts in a chat the member picks. Files documents outside the 主席团 space can be attached to 小飒 questions in any chat; 主席团 documents only in the member's private 小飒 chat.
 
 ## Folder operations
 

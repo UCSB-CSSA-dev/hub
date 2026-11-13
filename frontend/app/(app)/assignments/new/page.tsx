@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Suspense, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
+import { SasaAvatar } from "@/components/ai/sasa-avatar";
 import { FileTypeIcon } from "@/components/files/file-icon";
 import { UploadPanel } from "@/components/files/upload-panel";
 import { useFileUpload } from "@/components/files/use-file-upload";
@@ -45,7 +46,9 @@ function NewAssignment() {
   const editId = params.get("a") as Id<"assignments"> | null;
   const existing = useQuery(api.assignments.get, editId ? { assignmentId: editId } : "skip");
   const creatable = useQuery(api.assignments.creatableChannels);
-  if (creatable === undefined || (editId && existing === undefined)) {
+  const suggestionId = params.get("s") as Id<"aiSuggestions"> | null;
+  const suggestion = useQuery(api.ai.getSuggestion, suggestionId ? { suggestionId } : "skip");
+  if (creatable === undefined || (editId && existing === undefined) || (suggestionId && suggestion === undefined)) {
     return (
       <>
         <PageHeader title="" />
@@ -57,11 +60,20 @@ function NewAssignment() {
       </>
     );
   }
+  // A card already used, or meant for another task, opens the plain form.
+  const usable =
+    suggestion &&
+    suggestion.status === "pending" &&
+    suggestion.canAct &&
+    (editId ? suggestion.action === "edit" && suggestion.assignmentId === editId : suggestion.action !== "edit")
+      ? suggestion
+      : null;
   return (
     <TaskForm
-      key={editId ?? "new"}
+      key={`${editId ?? "new"}:${usable?._id ?? ""}`}
       creatable={creatable}
       existing={existing ?? null}
+      suggestion={usable}
       initialChannel={(params.get("c") as Id<"channels"> | null) ?? undefined}
       initialEvent={(params.get("event") as Id<"assignments"> | null) ?? undefined}
       initialKind={params.get("kind") === "event" ? "event" : "task"}
@@ -71,16 +83,20 @@ function NewAssignment() {
 
 type Creatable = FunctionReturnType<typeof api.assignments.creatableChannels>;
 type Existing = NonNullable<FunctionReturnType<typeof api.assignments.get>>;
+type Suggestion = NonNullable<FunctionReturnType<typeof api.ai.getSuggestion>>;
 
 function TaskForm({
   creatable,
   existing,
+  suggestion,
   initialChannel,
   initialEvent,
   initialKind,
 }: {
   creatable: Creatable;
   existing: Existing | null;
+  /** 小飒's suggestion card the form was opened from; its fields prefill the form. */
+  suggestion: Suggestion | null;
   initialChannel?: Id<"channels">;
   initialEvent?: Id<"assignments">;
   initialKind: "task" | "event";
@@ -91,6 +107,7 @@ function TaskForm({
   const chatName = useTaskChatName();
   const create = useMutation(api.assignments.create);
   const update = useMutation(api.assignments.update);
+  const addAssignees = useMutation(api.assignments.addAssignees);
   const publish = useMutation(api.assignments.publish);
   const showError = useErrorToast();
   const { upload, items, dismiss, clearDone, busy: uploading } = useFileUpload();
@@ -98,22 +115,32 @@ function TaskForm({
 
   const a = existing?.assignment;
   const isDraft = !a || a.status === "draft";
+  const s = suggestion?.fields;
+  const suggestedChannel = suggestion?.channelId ?? initialChannel;
   const [channelId, setChannelId] = useState<string>(
-    existing?.channel?._id ?? (creatable.some((c) => c._id === initialChannel) ? initialChannel! : (creatable[0]?._id ?? "")),
+    existing?.channel?._id ??
+      (creatable.some((c) => c._id === suggestedChannel) ? suggestedChannel! : (creatable[0]?._id ?? "")),
   );
-  const [kind, setKind] = useState<"task" | "event">(a?.kind ?? initialKind);
-  const [title, setTitle] = useState(a?.title ?? "");
-  const [description, setDescription] = useState(a?.description ?? "");
-  const [due, setDue] = useState(toLocalInput(a?.dueAt));
-  const [start, setStart] = useState(toLocalInput(a?.startAt));
-  const [end, setEnd] = useState(toLocalInput(a?.endAt));
-  const [location, setLocation] = useState(a?.location ?? "");
+  const [kind, setKind] = useState<"task" | "event">(
+    a?.kind ?? (suggestion ? (suggestion.action === "create_event" ? "event" : "task") : initialKind),
+  );
+  const [title, setTitle] = useState(s?.title ?? a?.title ?? "");
+  const [description, setDescription] = useState(s?.description ?? a?.description ?? "");
+  const [due, setDue] = useState(toLocalInput(s?.dueAt ?? a?.dueAt));
+  const [start, setStart] = useState(toLocalInput(s?.startAt ?? a?.startAt));
+  const [end, setEnd] = useState(toLocalInput(s?.endAt ?? a?.endAt));
+  const [location, setLocation] = useState(s?.location ?? a?.location ?? "");
   const [requiresSubmission, setRequiresSubmission] = useState(a?.requiresSubmission ?? true);
   const [autoApprove, setAutoApprove] = useState(a?.autoApprove ?? false);
   const [eventId, setEventId] = useState<string>(a?.eventId ?? initialEvent ?? "");
   const [space, setSpace] = useState<string>(a ? (a.departmentId ?? PUBLIC) : "");
-  const [everyone, setEveryone] = useState(a ? a.draftEveryone : true);
-  const [assigneeIds, setAssigneeIds] = useState<string[]>(a?.draftAssigneeIds ?? []);
+  const suggestedPeople = s?.assigneeIds ?? [];
+  const [everyone, setEveryone] = useState(a ? a.draftEveryone : suggestedPeople.length === 0);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(a?.draftAssigneeIds ?? suggestedPeople);
+  // Open tasks manage assignees on the task page; a suggestion's new people are added on save.
+  const [addingIds, setAddingIds] = useState<string[]>(
+    a && !isDraft ? suggestedPeople.filter((id) => !existing.assignees.some((x) => x.userId === id)) : [],
+  );
   const [picking, setPicking] = useState(false);
   const [pending, setPending] = useState<File[]>([]);
   const [fileIds, setFileIds] = useState<Id<"files">[]>(existing?.files.map((f) => f._id) ?? []);
@@ -129,6 +156,7 @@ function TaskForm({
   const spaceValue = space || (spaces[0] ? (spaces[0].departmentId ?? PUBLIC) : "");
   const people = audience?.people ?? [];
   const picked = assigneeIds.flatMap((id) => people.find((p) => p._id === id) ?? []);
+  const adding = addingIds.flatMap((id) => people.find((p) => p._id === id) ?? []);
   const existingFiles = existing?.files.filter((f) => fileIds.includes(f._id)) ?? [];
 
   const startMs = fromLocalInput(start);
@@ -174,6 +202,7 @@ function TaskForm({
           assigneeIds: everyone ? [] : (assigneeIds as Id<"users">[]),
           everyone,
           publish: andPublish && pending.length === 0,
+          suggestionId: suggestion?._id,
         });
         if (pending.length > 0) {
           const uploaded = await upload(pending, { assignmentId: id });
@@ -192,7 +221,9 @@ function TaskForm({
           departmentId: isDraft ? (departmentId ?? null) : undefined,
           fileIds,
           ...(isDraft ? { assigneeIds: everyone ? [] : (assigneeIds as Id<"users">[]), everyone } : {}),
+          suggestionId: suggestion?._id,
         });
+        if (!isDraft && adding.length > 0) await addAssignees({ assignmentId: id, userIds: adding.map((p) => p._id) });
         if (andPublish && isDraft) await publish({ assignmentId: id });
       }
       toast.success(andPublish ? t("published") : t("saved"));
@@ -244,6 +275,12 @@ function TaskForm({
       </PageHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <form onSubmit={onSubmit} className="mx-auto flex max-w-2xl flex-col gap-5 p-4">
+          {suggestion ? (
+            <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+              <SasaAvatar className="size-10" />
+              <p>{t("fromSasa")}</p>
+            </div>
+          ) : null}
           {!a ? (
             <div className="grid grid-cols-2 gap-2">
               <KindButton active={kind === "task"} onClick={() => setKind("task")} icon={<ClipboardListIcon />} label={t("kindTask")} hint={t("kindTaskHint")} />
@@ -387,7 +424,28 @@ function TaskForm({
                 ) : null}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">{t("assigneesOnTaskPage")}</p>
+              <div className="flex flex-col gap-2">
+                {adding.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground">{t("sasaAdds")}</span>
+                    {adding.map((p) => (
+                      <span key={p._id} className="flex items-center gap-1.5 rounded-full bg-primary/10 py-0.5 pr-1 pl-0.5">
+                        <PersonAvatar person={p} className="size-5" />
+                        {displayName(p, locale)}
+                        <button
+                          type="button"
+                          aria-label={t("remove")}
+                          onClick={() => setAddingIds((ids) => ids.filter((id) => id !== p._id))}
+                          className="rounded-full p-0.5 hover:bg-accent"
+                        >
+                          <XIcon className="size-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="text-sm text-muted-foreground">{t("assigneesOnTaskPage")}</p>
+              </div>
             )}
           </Field>
 

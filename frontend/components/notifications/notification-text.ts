@@ -99,6 +99,10 @@ export function useNotificationText() {
         return { title: t("docMention", { actor: person("actorId"), title }) };
       case "task_mention":
         return { title: t("taskMention", { actor: person("actorId"), kind: taskKind(), title }) };
+      case "ai_appeal":
+        return { title: t("aiAppeal", { actor: person("actorId") }), detail: preview };
+      case "ai_appeal_reviewed":
+        return { title: t(params.approved ? "aiAppealApproved" : "aiAppealDenied"), detail: note };
     }
   };
 }

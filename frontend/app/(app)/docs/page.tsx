@@ -14,15 +14,19 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   PrinterIcon,
+  SparklesIcon,
   Trash2Icon,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useLocale, useTranslations } from "next-intl";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { useAiCredits } from "@/components/ai/ai-chat";
+import { DocSummaryPanel, SasaDraftPanel, SasaWriteDialog } from "@/components/ai/doc-sasa";
+import { DictationBar, DictationControl, useDictation } from "@/components/docs/dictation";
 import { DocEditor } from "@/components/docs/doc-editor";
 import { MarkdownView } from "@/components/docs/markdown-view";
 import { PageHeader } from "@/components/layout/app-shell";
@@ -122,10 +126,16 @@ function useParentLink(doc: Doc): { href: string; label: string; back: string; i
 
 function DocumentDetail({ doc }: { doc: Doc }) {
   const t = useTranslations("docs");
+  const tAi = useTranslations("ai");
   const locale = useLocale() as Locale;
   const format = useFormatter();
   const parent = useParentLink(doc);
+  const credits = useAiCredits();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const dictation = useDictation(editor);
+  const [writing, setWriting] = useState(false);
+  const listenOnOpen = useSearchParams().get("listen") === "1";
+  const autoListened = useRef(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [printing, setPrinting] = useState<string | null>(null);
@@ -135,6 +145,17 @@ function DocumentDetail({ doc }: { doc: Doc }) {
   const canRename = doc.parent.kind === "file" ? doc.canDelete : doc.canEdit;
 
   const markdown = () => editor?.getMarkdown() ?? "";
+
+  // "开始听写" in the new-document dialog opens the page with ?listen=1.
+  const { listening, start: startDictation, stop: stopDictation } = dictation;
+  useEffect(() => {
+    if (!listenOnOpen || autoListened.current || !editor || !doc.canEdit) return;
+    autoListened.current = true;
+    startDictation();
+  }, [listenOnOpen, editor, doc.canEdit, startDictation]);
+  useEffect(() => {
+    if (listening && !doc.canEdit) stopDictation();
+  }, [listening, doc.canEdit, stopDictation]);
 
   const downloadMarkdown = () => {
     const blob = new Blob([`# ${doc.title}\n\n${markdown()}\n`], { type: "text/markdown;charset=utf-8" });
@@ -226,10 +247,25 @@ function DocumentDetail({ doc }: { doc: Doc }) {
                 </Badge>
               )}
             </div>
+            {doc.canEdit ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 print:hidden">
+                <DictationControl dictation={dictation} disabled={!editor} />
+                {credits?.configured ? (
+                  <Button size="sm" variant="outline" onClick={() => setWriting(true)}>
+                    <SparklesIcon />
+                    {tAi("writeButton")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
+          <SasaDraftPanel documentId={doc._id} editor={editor} />
           <DocEditor documentId={doc._id} editable={doc.canEdit} mentionable={doc.mentionable} onEditor={setEditor} />
+          <DictationBar dictation={dictation} />
+          <DocSummaryPanel documentId={doc._id} />
         </div>
       </div>
+      {doc.canEdit ? <SasaWriteDialog documentId={doc._id} open={writing} onClose={() => setWriting(false)} /> : null}
       <RenameDialog key={String(renaming)} doc={doc} open={renaming} onClose={() => setRenaming(false)} />
       <DeleteDialog doc={doc} parentHref={parent.href} open={deleting} onClose={() => setDeleting(false)} />
       {printing !== null

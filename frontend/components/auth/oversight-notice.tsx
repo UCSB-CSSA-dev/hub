@@ -26,6 +26,7 @@ export function OversightNotice() {
         <li>{t("noticeRecall")}</li>
         <li>{t("noticeFiles")}</li>
         <li>{t("noticeProfile")}</li>
+        <li>{t("noticeAi")}</li>
       </ul>
     </section>
   );

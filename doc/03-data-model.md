@@ -18,7 +18,7 @@ Only create the tables for the current stage (see [09-roadmap.md](09-roadmap.md)
 | 1 | `users` (+ Convex Auth tables), `departments`, `departmentMemberships`, `formerPresidium`, `deactivationRequests`, `preApprovals`, `channels`, `channelMembers`, `messages`, `auditLogs` |
 | 2 | `groupDepartments`, `groupProposals`, `messageEdits`, `messageReactions`, `attachments`, `chatApps`, `chatAppResponses`, `notifications`, `pushSubscriptions` |
 | 3 | `fileSpaces`, `folders`, `files`, `driveUploads`, `documents` (+ the `prosemirrorSync` component), `assignments`, `assignmentSubmissions`, `assignmentComments`, `emailJobs` (+ `users.digestEmail`, `messages.assignmentId` and `messages.fileIds`) |
-| 4 | TBA (likely embedding tables with vector indexes for AI features) |
+| 4 | `aiRequests`, `aiCreditAdjustments`, `aiAppeals`, `aiFilterMemory`, `aiSuggestions`, `aiDocSummaries`, `aiDocDrafts` (+ `users.isBot`, `channels.aiEnabled*`, `channels.type: "assistant"`, `messages.kind: "ai"`, `messages.aiReadable`, `messages.ai`, `messages.aiDocumentIds`, `documents.text`) |
 
 The chat tables below match what Stage 2 deployed. Notes:
 
@@ -74,6 +74,7 @@ export default defineSchema({
 
     // App fields
     isSystemAdmin: v.optional(v.boolean()),   // first account; see 02-roles-and-permissions.md
+    isBot: v.optional(v.boolean()),           // the 小飒 assistant (Stage 4); has no status
     status: v.optional(v.union(
       v.literal("new"),          // signed in, onboarding not submitted
       v.literal("pending"),      // submitted, waiting for approval
@@ -164,20 +165,27 @@ export default defineSchema({
       v.literal("department"),     // one per department, access derived from memberships
       v.literal("group"),          // group chat belonging to departments
       v.literal("dm"),             // exactly two members
+      v.literal("assistant"),      // one per user: their private chat with 小飒 (Stage 4)
     ),
     name: v.optional(v.string()),            // group chats; others derive their name
     departmentId: v.optional(v.id("departments")),
-    dmKey: v.optional(v.string()),           // sorted "userIdA:userIdB" for DM uniqueness
+    dmKey: v.optional(v.string()),           // sorted "userIdA:userIdB" for DM uniqueness; "assistant:<userId>"
     createdBy: v.optional(v.id("users")),
     lastMessageAt: v.optional(v.number()),
     retentionDays: v.optional(v.number()),   // unset = 15
     purpose: v.optional(v.string()),         // groups
     proposalId: v.optional(v.id("groupProposals")),
     endedAt: v.optional(v.number()),         // groups: read-only once set
+    aiEnabled: v.optional(v.boolean()),      // AI mode (org, department, group); Stage 4
+    aiEnabledAt: v.optional(v.number()),
+    aiEnabledBy: v.optional(v.id("users")),
+    aiScanWindowStart: v.optional(v.number()), // task suggestion rate limit: hour window start
+    aiScanCount: v.optional(v.number()),       // and model calls in it
   })
     .index("by_type", ["type"])
     .index("by_department", ["departmentId"])
-    .index("by_dmKey", ["dmKey"]),
+    .index("by_dmKey", ["dmKey"])
+    .index("by_aiEnabled", ["aiEnabled"]),
 
   // Departments involved in a group; their 部长 are members automatically.
   groupDepartments: defineTable({
@@ -223,7 +231,10 @@ export default defineSchema({
     channelId: v.id("channels"),
     authorId: v.id("users"),
     body: v.string(),                        // lightweight markdown; mentions as <@id> / <@all>
-    kind: v.optional(v.union(v.literal("user"), v.literal("system"), v.literal("forward"), v.literal("task"), v.literal("doc"))),
+    kind: v.optional(v.union(
+      v.literal("user"), v.literal("system"), v.literal("forward"), v.literal("task"), v.literal("doc"),
+      v.literal("ai"),                       // written by 小飒 (Stage 4)
+    )),
     mentionUserIds: v.optional(v.array(v.id("users"))),
     mentionAll: v.optional(v.boolean()),
     replyToId: v.optional(v.id("messages")),
@@ -238,6 +249,16 @@ export default defineSchema({
     assignmentId: v.optional(v.id("assignments")), // kind "task": the task or event card (Stage 3)
     fileIds: v.optional(v.array(v.id("files"))),   // files shared from Files (Stage 3)
     documentId: v.optional(v.id("documents")),      // kind "doc": a shared document card
+    aiReadable: v.optional(v.boolean()),     // sent while AI mode was on, or in a 小飒 chat; only these reach the model
+    ai: v.optional(v.object({                // kind "ai"
+      status: v.union(v.literal("thinking"), v.literal("streaming"), v.literal("done"),
+        v.literal("refused"), v.literal("failed")),
+      requestId: v.optional(v.id("aiRequests")),
+      suggestionId: v.optional(v.id("aiSuggestions")),
+      notice: v.optional(v.string()),        // "welcome" | "appeal_denied", translated on the client
+      actorId: v.optional(v.id("users")),    // 小飒 posted this for that member (announcements from a document summary)
+    })),
+    aiDocumentIds: v.optional(v.array(v.id("documents"))), // documents attached to a question for 小飒 (max 3)
   })
     .index("by_channel", ["channelId"])                 // ordered by _creationTime
     .index("by_channel_announcement", ["channelId", "announcement"]) // unseen announcements
@@ -362,9 +383,11 @@ export default defineSchema({
     updatedAt: v.number(),
     updatedBy: v.id("users"),
     mentionedIds: v.optional(v.array(v.id("users"))), // already notified, so a save only notifies new mentions
+    text: v.optional(v.string()),            // plain-text copy of the last saved version (≤ 30,000 chars), for 小飒
   })
     .index("by_assignment", ["assignmentId"])
-    .index("by_channel", ["channelId"]),
+    .index("by_channel", ["channelId"])
+    .index("by_updatedAt", ["updatedAt"]),   // recent documents for the 小飒 attach picker
 
   // ---------- Tasks and events (UI: 任务 / 活动) ----------
   assignments: defineTable({
@@ -479,6 +502,122 @@ export default defineSchema({
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_day", ["day"]),
 
+  // ---------- AI assistant 小飒 (Stage 4) ----------
+  aiRequests: defineTable({                  // one question, summary or writing prompt; the credit ledger
+    userId: v.id("users"),
+    channelId: v.optional(v.id("channels")),         // chat questions
+    questionMessageId: v.optional(v.id("messages")), // chat questions
+    replyMessageId: v.optional(v.id("messages")),
+    documentId: v.optional(v.id("documents")),       // summaries and writing prompts
+    source: v.union(v.literal("mention"), v.literal("private"), v.literal("appeal"),
+      v.literal("doc_summary"), v.literal("doc_write")),
+    status: v.union(v.literal("pending"), v.literal("done"), v.literal("refused"), v.literal("failed")),
+    cost: v.number(),                        // credits taken; 0 once failed
+    weekKey: v.string(),                     // Pacific date of the Sunday the credit week started
+    skipFilter: v.optional(v.boolean()),     // approved appeals
+    model: v.optional(v.string()),
+    error: v.optional(v.string()),
+  })
+    .index("by_user_week", ["userId", "weekKey"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_week", ["weekKey"]),
+
+  aiCreditAdjustments: defineTable({         // credits given back by approved appeals
+    userId: v.id("users"),
+    weekKey: v.string(),
+    delta: v.number(),
+    reason: v.string(),
+    requestId: v.optional(v.id("aiRequests")),
+  }).index("by_user_week", ["userId", "weekKey"]),
+
+  aiAppeals: defineTable({
+    requestId: v.id("aiRequests"),
+    userId: v.id("users"),
+    channelId: v.optional(v.id("channels")),  // chat questions
+    documentId: v.optional(v.id("documents")), // writing prompts
+    question: v.string(),                    // snapshots (the question or prompt); the messages may expire first
+    reason: v.string(),
+    note: v.optional(v.string()),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("denied")),
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    reviewNote: v.optional(v.string()),
+  })
+    .index("by_status", ["status"])
+    .index("by_request", ["requestId"]),
+
+  aiSuggestions: defineTable({               // a task or event spotted by 小飒
+    channelId: v.id("channels"),
+    sourceMessageId: v.optional(v.id("messages")), // chat suggestions
+    documentId: v.optional(v.id("documents")),     // task changes from a document summary
+    messageId: v.optional(v.id("messages")), // the card
+    action: v.union(v.literal("create_task"), v.literal("create_event"), v.literal("edit")),
+    assignmentId: v.optional(v.id("assignments")), // edit only
+    fields: v.object({
+      title: v.optional(v.string()),
+      description: v.optional(v.string()),
+      assigneeIds: v.optional(v.array(v.id("users"))),
+      dueAt: v.optional(v.number()),
+      startAt: v.optional(v.number()),
+      endAt: v.optional(v.number()),
+      location: v.optional(v.string()),
+    }),
+    status: v.union(v.literal("pending"), v.literal("applied"), v.literal("dismissed")),
+    actedBy: v.optional(v.id("users")),
+  })
+    .index("by_channel", ["channelId"])
+    .index("by_source", ["sourceMessageId"])
+    .index("by_document", ["documentId"]),
+
+  aiFilterMemory: defineTable({              // rules system admins teach the relevance filter
+    verdict: v.union(v.literal("allow"), v.literal("refuse")),
+    text: v.string(),                        // ≤ 300 chars; at most 60 rules
+    appealId: v.optional(v.id("aiAppeals")), // learned while reviewing this appeal
+    createdBy: v.id("users"),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+  }).index("by_updatedAt", ["updatedAt"]),
+
+  aiDocSummaries: defineTable({              // one per document: the shared 小飒 summary under it
+    documentId: v.id("documents"),
+    requestedBy: v.id("users"),
+    pendingRequestId: v.optional(v.id("aiRequests")), // being (re)generated
+    generatedAt: v.optional(v.number()),
+    docUpdatedAt: v.optional(v.number()),    // documents.updatedAt it was made from; newer = outdated
+    summary: v.string(),
+    tasks: v.array(v.object({                // tasks and events to create
+      kind: v.union(v.literal("task"), v.literal("event")),
+      title: v.string(), description: v.optional(v.string()), assigneeIds: v.array(v.id("users")),
+      dueAt: v.optional(v.number()), startAt: v.optional(v.number()), endAt: v.optional(v.number()),
+      location: v.optional(v.string()),
+      assignmentId: v.optional(v.id("assignments")), // the draft created from it
+    })),
+    announcements: v.array(v.object({
+      body: v.string(),
+      sent: v.array(v.object({ channelId: v.id("channels"), messageId: v.id("messages"), by: v.id("users"), at: v.number() })),
+    })),
+    edits: v.array(v.object({                // changes to open tasks
+      assignmentId: v.id("assignments"),
+      fields: v.object({ /* same as aiSuggestions.fields */ }),
+      suggestionId: v.optional(v.id("aiSuggestions")),
+    })),
+    error: v.optional(v.string()),           // the last attempt failed (the previous summary stays)
+  }).index("by_document", ["documentId"]),
+
+  aiDocDrafts: defineTable({                 // a private writing result for one editor
+    documentId: v.id("documents"),
+    userId: v.id("users"),
+    requestId: v.id("aiRequests"),
+    prompt: v.string(),
+    status: v.union(v.literal("thinking"), v.literal("streaming"), v.literal("done"),
+      v.literal("refused"), v.literal("failed"), v.literal("closed")),
+    text: v.string(),                        // markdown, ≤ 20,000 chars
+    reason: v.optional(v.string()),          // refusal reason, or the admin's note after a denied appeal
+    appealDenied: v.optional(v.boolean()),
+  })
+    .index("by_document_user", ["documentId", "userId"])
+    .index("by_request", ["requestId"]),
+
   // ---------- Audit ----------
   auditLogs: defineTable({
     actorId: v.id("users"),
@@ -553,6 +692,7 @@ deactivationRequests: defineTable({
   - Legacy `announcement` channels (until `maintenance.mergeAnnouncementChannels` removes them): like the chat they merge into, read-only.
   - `group`: explicit members (`channelMembers.joinedAt` set), the 部长 of every department in `groupDepartments`, and 主席团 while any involved department is archived or has no 部长.
   - `dm`: only the two users with a `channelMembers` row.
+  - `assistant`: only its owner (parsed from `dmKey`); overseeable like a DM.
   - Anyone else who oversees a participant reads through oversight (read-only).
 - `channelMembers` therefore has two jobs: it is the **membership list for DMs and groups** (rows with `joinedAt`), and the **read state** (`lastReadAt`, `muted`) for every channel. For derived channels the row is created lazily the first time the user opens the channel or sends a message.
 - `retentionDays` (unset = 15) drives the hourly purge; ended groups are deleted entirely once their retention has passed.
@@ -566,8 +706,20 @@ deactivationRequests: defineTable({
 - There is no delete. Recall (author, 5 minutes) and moderation removal (主席团) keep the row but erase the body, mentions, reactions, edit history, attachments, and related notifications; `recalledAt` or `removedAt` / `removedBy` record what happened.
 - Edits copy the previous body into `messageEdits` and set `editedAt`.
 - `kind: "system"` rows carry `system.event` and `params` and are translated on the client; `kind: "forward"` rows carry a snapshot in `forward`.
-- `announcement: true` marks a 公告. Only `messages.send` sets it (checked against `canAnnounce`); edits keep it.
+- `announcement: true` marks a 公告. Only `messages.send` sets it (checked against `canAnnounce`), and `aiDocs.sendAnnouncement` for announcements found in a document summary (`canAnnounce`, or a manager of a group chat with AI mode on); edits keep it.
 - Paginate with `.withIndex("by_channel", q => q.eq("channelId", id)).order("desc").paginate(opts)`.
+- `kind: "ai"` rows are authored by the 小飒 bot user. A streaming answer is patched in place (`ai.status` goes `thinking` → `streaming` → `done`, or `refused` / `failed`).
+
+### AI assistant (Stage 4)
+
+- `aiReadable` is set when a message is sent, from the channel's `aiEnabled` (always in `assistant` channels). It never changes later, so switching AI mode off and on doesn't expose messages sent while it was off.
+- A member's balance for a week is `allowance − sum(aiRequests.cost) + sum(aiCreditAdjustments.delta)` for that `weekKey`, floored at 0. Failed requests set `cost` to 0.
+- `aiRequests`, `aiCreditAdjustments`, settled `aiAppeals` and `aiSuggestions` older than 35 days are deleted daily (`ai.cleanup`). Pending requests older than 5 minutes are failed every 10 minutes (`ai.sweepStale`).
+- `aiFilterMemory` rows are read (newest first) on every relevance-filter call, so edits apply to the next request. They're kept until a system admin deletes them; they survive the 35-day cleanup of the appeals they came from.
+- A request has either `channelId` + `questionMessageId` (chat questions) or `documentId` (`doc_summary`, `doc_write`, and appeals of writing prompts).
+- `documents.text` is written by the prosemirror `onSnapshot` callback (`lib/docText.ts`); documents saved before it existed fall back to the latest snapshot.
+- `aiDocSummaries` has at most one row per document and is deleted with the document. `aiDocDrafts` are never applied by the server: the editor inserts the text through the collaborative editor, then closes the draft. Drafts older than 7 days are deleted by `ai.cleanup`.
+- Details: [features/ai-assistant.md](features/ai-assistant.md).
 
 ### fileSpaces, folders and files
 

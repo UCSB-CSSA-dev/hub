@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { markSuggestionApplied } from "./lib/ai/suggestions";
 import { channelAudience, groupDepartmentIds, touchReadState } from "./lib/channels";
 import { LIMITS } from "./lib/constants";
 import { appError } from "./lib/errors";
@@ -272,6 +273,8 @@ export const create = mutation({
     assigneeIds: v.array(v.id("users")),
     everyone: v.boolean(),
     publish: v.boolean(),
+    /** Created from 小飒's suggestion card. */
+    suggestionId: v.optional(v.id("aiSuggestions")),
   },
   handler: async (ctx, args) => {
     const viewer = await requireApproved(ctx);
@@ -290,17 +293,64 @@ export const create = mutation({
       draftEveryone: args.everyone || undefined,
     });
     if (args.publish) await publishDraft(ctx, viewer, (await ctx.db.get("assignments", assignmentId))!, channel);
+    await markSuggestionApplied(ctx, viewer, args.suggestionId, channel._id);
     return assignmentId;
   },
 });
 
+/**
+ * A draft from a task 小飒 found in a document. Same checks as `create`; assignees outside the chat are
+ * dropped. Nobody is notified until the creator publishes it.
+ */
+export async function createDraftFromDocument(
+  ctx: MutationCtx,
+  viewer: ViewerContext,
+  channel: Doc<"channels">,
+  item: Pick<Doc<"assignments">, "kind" | "title" | "description" | "dueAt" | "startAt" | "endAt" | "location"> & {
+    assigneeIds: Id<"users">[];
+    eventId?: Id<"assignments">;
+  },
+) {
+  if (!(await canCreateTaskIn(ctx, viewer, channel))) throw appError("FORBIDDEN");
+  const draft = await validateDraft(
+    ctx,
+    viewer,
+    channel,
+    {
+      kind: item.kind,
+      title: item.title,
+      description: item.description?.slice(0, LIMITS.taskDescription),
+      dueAt: item.dueAt,
+      startAt: item.startAt,
+      endAt: item.endAt,
+      location: item.location,
+      requiresSubmission: false,
+      autoApprove: undefined,
+      eventId: item.kind === "task" ? item.eventId : undefined,
+      departmentId: undefined,
+    },
+    null,
+  );
+  const audience = new Set(await channelAudience(ctx, channel));
+  const assigneeIds = [...new Set(item.assigneeIds)].filter((id) => audience.has(id)).slice(0, LIMITS.taskAssignees);
+  return ctx.db.insert("assignments", {
+    ...draft,
+    createdBy: viewer.user._id,
+    channelId: channel._id,
+    status: "draft",
+    fileIds: [],
+    draftAssigneeIds: assigneeIds,
+  });
+}
+
 export const update = mutation({
-  args: { assignmentId: v.id("assignments"), ...editableFields },
+  args: { assignmentId: v.id("assignments"), ...editableFields, suggestionId: v.optional(v.id("aiSuggestions")) },
   handler: async (ctx, args) => {
     const viewer = await requireApproved(ctx);
     const { assignment, access } = await requireReviewer(ctx, viewer, args.assignmentId);
     const channel = access.channel;
     if (!channel) throw appError("NOT_FOUND");
+    await markSuggestionApplied(ctx, viewer, args.suggestionId, channel._id);
     const pick = <T>(value: T | null | undefined, fallback: T | undefined) =>
       value === null ? undefined : value === undefined ? fallback : value;
     const draft = await validateDraft(
@@ -916,34 +966,42 @@ export const listManaged = query({
   },
 });
 
+/** Chats the viewer can create tasks in. */
+export async function taskChannelsFor(ctx: QueryCtx, viewer: ViewerContext): Promise<Doc<"channels">[]> {
+  if (!viewer.isAdmin && viewer.ledDepartmentIds.length === 0) return [];
+  const candidates = new Map<Id<"channels">, Doc<"channels">>();
+  const add = (channel: Doc<"channels"> | null) => {
+    if (channel) candidates.set(channel._id, channel);
+  };
+  if (viewer.isAdmin) {
+    add(await ctx.db.query("channels").withIndex("by_type", (q) => q.eq("type", "org")).first());
+    for (const channel of await ctx.db.query("channels").withIndex("by_type", (q) => q.eq("type", "department")).collect()) {
+      add(channel);
+    }
+    const memberships = await ctx.db
+      .query("channelMembers")
+      .withIndex("by_user", (q) => q.eq("userId", viewer.user._id))
+      .collect();
+    for (const row of memberships) if (row.joinedAt !== undefined) add(await ctx.db.get("channels", row.channelId));
+  }
+  const scope = await managedChannelIds(ctx, { ...viewer, isAdmin: false });
+  if (scope !== "all") for (const id of scope) add(await ctx.db.get("channels", id));
+
+  const result: Doc<"channels">[] = [];
+  for (const channel of candidates.values()) {
+    if (channel.type !== "org" && channel.type !== "department" && channel.type !== "group") continue;
+    if (await canCreateTaskIn(ctx, viewer, channel)) result.push(channel);
+  }
+  return result;
+}
+
 /** Chats the viewer can create tasks in, with the file spaces each allows. */
 export const creatableChannels = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireApproved(ctx);
-    if (!viewer.isAdmin && viewer.ledDepartmentIds.length === 0) return [];
-    const candidates = new Map<Id<"channels">, Doc<"channels">>();
-    const add = (channel: Doc<"channels"> | null) => {
-      if (channel) candidates.set(channel._id, channel);
-    };
-    if (viewer.isAdmin) {
-      add(await ctx.db.query("channels").withIndex("by_type", (q) => q.eq("type", "org")).first());
-      for (const channel of await ctx.db.query("channels").withIndex("by_type", (q) => q.eq("type", "department")).collect()) {
-        add(channel);
-      }
-      const memberships = await ctx.db
-        .query("channelMembers")
-        .withIndex("by_user", (q) => q.eq("userId", viewer.user._id))
-        .collect();
-      for (const row of memberships) if (row.joinedAt !== undefined) add(await ctx.db.get("channels", row.channelId));
-    }
-    const scope = await managedChannelIds(ctx, { ...viewer, isAdmin: false });
-    if (scope !== "all") for (const id of scope) add(await ctx.db.get("channels", id));
-
     const result = [];
-    for (const channel of candidates.values()) {
-      if (channel.type !== "org" && channel.type !== "department" && channel.type !== "group") continue;
-      if (!(await canCreateTaskIn(ctx, viewer, channel))) continue;
+    for (const channel of await taskChannelsFor(ctx, viewer)) {
       const spaces = [];
       for (const departmentId of await taskSpaceOptions(ctx, viewer, channel)) {
         const department = departmentId ? await ctx.db.get("departments", departmentId) : null;

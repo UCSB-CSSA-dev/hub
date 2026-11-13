@@ -42,7 +42,8 @@
     "notifications": "Notifications",
     "admin": "Admin",
     "adminOverview": "Overview",
-    "auditLog": "Audit log"
+    "auditLog": "Audit log",
+    "sasa": "Sasa"
   },
   "errors": {
     "UNAUTHENTICATED": "Please sign in first.",
@@ -67,6 +68,10 @@
     "FILE_TYPE_BLOCKED": "For safety, this file type can't be uploaded.",
     "DRIVE_NOT_CONFIGURED": "Large files go to Google Drive, but the Apps Script isn't connected yet. Ask the Presidium.",
     "DRIVE_FAILED": "Uploading to Google Drive failed. Try again later.",
+    "AI_NO_CREDITS": "You've used this week's Sasa credits",
+    "AI_BUSY": "Sasa is still answering your last question",
+    "AI_NOT_ENABLED": "AI mode isn't on in this chat",
+    "AI_NOT_CONFIGURED": "Sasa isn't available yet",
     "invalid": {
       "title": "Enter a title (up to 120 characters).",
       "description": "The description is too long.",
@@ -79,7 +84,9 @@
       "fileIds": "An attachment was deleted or isn't in this task's folder. Remove it and try again.",
       "status": "The task's status changed. Refresh the page and try again.",
       "name": "The name can't be empty.",
-      "link": "Links must start with http:// or https://."
+      "link": "Links must start with http:// or https://.",
+      "rule": "The rule can't be empty and can have at most 300 characters.",
+      "memory_full": "Sasa's memory is full (60 rules). Delete older rules first."
     }
   },
   "signIn": {
@@ -93,7 +100,7 @@
   },
   "privacy": {
     "title": "Privacy Policy",
-    "updated": "Last updated: October 19, 2026",
+    "updated": "Last updated: November 13, 2026",
     "intro": "CSSA Hub is the internal work platform of the UCSB Chinese Students and Scholars Association (UCSB CSSA), for CSSA members only. This policy explains what information we collect and how we use it.",
     "collectTitle": "Information we collect",
     "collectGoogle": "Your name, @ucsb.edu email address, and profile picture from Google Sign-In. We only request basic profile and email access; we never access your Gmail, Google Drive, or other Google data.",
@@ -103,6 +110,8 @@
     "useBody": "This information is used for sign-in, showing the organization roster, approving members, and internal CSSA communication. Your profile photo, names, and bio are public and are shown on CSSA's public website. Beyond that, we do not sell, rent, or share your information with anyone outside CSSA, and we do not use it for advertising.",
     "oversightTitle": "Officer access",
     "oversightBody": "The Presidium can view all content on the platform; department leads can view messages and uploads from members of their departments. This is disclosed at sign-up and requires your consent, and every such view is recorded in an audit log.",
+    "aiTitle": "AI assistant Sasa",
+    "aiBody": "Only in chats with AI mode on (Sasa shows at the top of the chat), messages sent while it's on are sent to an AI service run by UCSB's College of Letters & Science (L&S) to answer @Sasa questions and suggest tasks. Questions you ask Sasa privately, along with the tasks, events and meetings needed to answer them, are processed the same way. So are documents you have Sasa summarize or write in, and documents you attach to a question (in shared chats, only documents everyone in the chat can open). Sasa only reads chats you take part in yourself, never content you can see only through oversight. We don't send this content to any other AI service. Your questions and Sasa's answers are stored like other messages and deleted on the same retention schedule; document summaries are saved with the document and deleted with it; writing drafts are visible only to you and deleted after 7 days. Document dictation doesn't involve Sasa: your browser recognizes the speech. Chrome and Edge send the audio to Google's or Microsoft's speech service; Safari may recognize it on the device.",
     "storageTitle": "Storage and security",
     "storageBody": "Data is stored on Convex (convex.dev) cloud infrastructure and encrypted in transit. Only approved CSSA members can access the platform. Chat messages are deleted automatically after 15 days unless an admin or lead extends a chat's retention (up to one year). Uploaded files are limited to 15 MB and deleted 15 days after they are sent; file links work without signing in, so anyone holding a link can open the file until then.",
     "deleteTitle": "Deactivation and deletion",
@@ -136,7 +145,8 @@
     "noticeFiles": "Uploaded files and images are limited to 15 MB and are deleted 15 days after sending. File links open without signing in, so don't share them outside CSSA.",
     "noticeProfile": "Your avatar, names and bio are public and appear on CSSA's public website.",
     "updatedTitle": "Privacy notice updated",
-    "updatedSubtitle": "We've added details about chats, files and oversight. Please read and agree again to continue."
+    "updatedSubtitle": "We've added details about the AI assistant Sasa. Please read and agree again to continue.",
+    "noticeAi": "The presidium can switch on AI mode in work chats (Sasa then shows at the top of the chat). Messages sent while it's on are processed by UCSB's AI service to answer @Sasa questions and suggest tasks; your private chat with Sasa is processed the same way and is overseeable like a DM. Documents you have Sasa summarize, write in, or answer questions about are processed the same way. Document dictation is done by your browser (Chrome sends the audio to Google)."
   },
   "pending": {
     "title": "Waiting for approval",
@@ -311,7 +321,10 @@
       "doc": "[Doc]",
       "attachment": "[Attachment]",
       "announcement": "[Announcement]",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "pinned": "Pinned",
+      "aiOn": "AI mode on",
+      "ai": "[Sasa]"
     },
     "members": {
       "title": "Members",
@@ -319,8 +332,17 @@
       "search": "Search members",
       "presidium": "Presidium",
       "lead": "Lead",
-      "none": "No members found"
-    }
+      "none": "No members found",
+      "systemAdmin": "System admin"
+    },
+    "sasa": "Sasa",
+    "aiTag": "AI",
+    "aiModeOn": "Switch on AI mode",
+    "aiModeOff": "Switch off AI mode",
+    "close": "Close",
+    "sasaChat": "Sasa",
+    "sasaChatOf": "{owner} · Sasa",
+    "sasaIntro": "Your AI assistant for tasks, deadlines and events"
   },
   "roster": {
     "title": "Roster",
@@ -551,7 +573,9 @@
     "retentionChanged": "{actor} set message retention to {days} days",
     "appStarted": "{actor} started a {kind}: \"{title}\"",
     "meetingConfirmed": "Meeting \"{title}\" is set for {day} {time}",
-    "unknown": "System message"
+    "unknown": "System message",
+    "aiEnabled": "{actor} switched on AI mode; new messages can be read by Sasa",
+    "aiDisabled": "{actor} switched off AI mode"
   },
   "notifications": {
     "title": "Notifications",
@@ -597,7 +621,10 @@
     "submissionCompleted": "{actor} marked your \"{title}\" as complete",
     "assignmentComment": "{actor} commented on \"{title}\"",
     "docMention": "{actor} mentioned you in \"{title}\"",
-    "taskMention": "{actor} mentioned you in the {kind} \"{title}\""
+    "taskMention": "{actor} mentioned you in the {kind} \"{title}\"",
+    "aiAppeal": "{actor} appealed a refusal by Sasa",
+    "aiAppealApproved": "Your appeal was approved; Sasa will answer your question",
+    "aiAppealDenied": "Your appeal was declined"
   },
   "groups": {
     "status": {
@@ -669,7 +696,8 @@
     "leaveBody": "You'll stop seeing this group's messages. A lead would need to add you back.",
     "end": "End group",
     "endTitle": "End this group?",
-    "endBody": "The group becomes read-only and its messages are deleted after the retention period. This can't be undone."
+    "endBody": "The group becomes read-only and its messages are deleted after the retention period. This can't be undone.",
+    "systemAdminManagers": "System admins: "
   },
   "apps": {
     "kind": {
@@ -847,7 +875,10 @@
       "group_end": "ended a group",
       "channel_retention_change": "changed message retention",
       "message_moderate_remove": "removed a message",
-      "oversight_channel_open": "opened a chat through oversight"
+      "oversight_channel_open": "opened a chat through oversight",
+      "channel_ai_mode": "switched AI mode",
+      "ai_appeal_review": "reviewed a Sasa appeal",
+      "ai_memory_change": "changed Sasa's memory"
     },
     "openTasks": "Open tasks",
     "overdueTasks": "Overdue to-dos",
@@ -1112,7 +1143,9 @@
     "markComplete": "Mark complete",
     "markedCompleteToast": "Marked complete",
     "markCompleteHint": "Counts as done without a submission. You can still request changes later.",
-    "completedWithoutSubmission": "Marked complete by a reviewer without a submission."
+    "completedWithoutSubmission": "Marked complete by a reviewer without a submission.",
+    "fromSasa": "Filled in from Sasa's suggestion. Please check it before saving.",
+    "sasaAdds": "Added on save:"
   },
   "docs": {
     "title": "Documents",
@@ -1170,7 +1203,21 @@
     "chatDocsBody": "Every shared document started in this chat. They stay here even after old messages expire.",
     "chatCardLabel": "Shared document",
     "editedAt": "Edited {time}",
-    "cardGone": "Document deleted"
+    "cardGone": "Document deleted",
+    "dictation": "Dictate",
+    "dictationStop": "Stop dictating",
+    "dictationHint": "Turns what you say into text at the end of the document. The browser does the speech recognition; Sasa isn't involved and no credits are used.",
+    "dictationUnsupported": "This browser doesn't support speech recognition. Use Chrome, Edge or Safari.",
+    "dictationLanguage": "Dictation language",
+    "dictationListening": "Listening…",
+    "dictationPrivacy": "Your browser recognizes the speech; Chrome and Edge send the audio to Google's or Microsoft's speech service.",
+    "dictationDenied": "Can't use the microphone. Allow microphone access in your browser settings.",
+    "dictationError": "Speech recognition failed. Try again.",
+    "startWith": "Start with",
+    "startBlank": "Blank",
+    "startListen": "Transcribe",
+    "startSasa": "Draft with Sasa",
+    "startListenHint": "Starts dictating as soon as the document opens, turning the meeting into text; Sasa can then organize it into meeting notes. Your browser recognizes the speech (Chrome sends it to Google)."
   },
   "about": {
     "navAbout": "About",
@@ -1218,5 +1265,205 @@
     "memberCount": "{count, plural, one {# person} other {# people}}",
     "privacy": "Privacy policy",
     "photoCredits": "Campus photos from Wikimedia Commons:"
+  },
+  "ai": {
+    "welcome": "Hi, I'm Sasa! Ask me about your tasks, deadlines, events and meetings, or what people discussed in chats with AI mode on. I can also brainstorm ideas for CSSA.",
+    "welcomeHint": "Each question uses 1 credit; credits refresh every Sunday at 8 AM Pacific. Requests unrelated to CSSA, like homework or coursework, won't be answered.",
+    "appealDeniedNotice": "This isn't something Sasa should handle",
+    "adminNote": "Admin note: {note}",
+    "thinking": "Sasa is thinking",
+    "failed": "Sasa couldn't answer right now, and the credit was refunded. Please try again later.",
+    "refusedTitle": "Sasa only answers questions about CSSA work",
+    "refusedCost": "An unrelated question uses {cost} credits in total. If you think this is a mistake, you can appeal.",
+    "appealStatus": {
+      "pending": "Appeal sent; waiting for a system admin",
+      "approved": "Appeal approved; credits refunded",
+      "denied": "Appeal declined"
+    },
+    "appeal": "Appeal",
+    "appealSent": "Appeal sent",
+    "appealTitle": "Appeal Sasa's refusal",
+    "appealBody": "A system admin will look at your question. If approved, you get 2 credits back and Sasa answers it for free; otherwise nothing is refunded. Each question can be appealed once, within 7 days.",
+    "appealPlaceholder": "How is this question related to CSSA work? (optional)",
+    "appealSubmit": "Send appeal",
+    "cancel": "Cancel",
+    "suggestionGone": "This suggestion is no longer available",
+    "field": {
+      "title": "Title",
+      "assignees": "Assignees",
+      "helpers": "Helpers",
+      "due": "Due",
+      "start": "Starts",
+      "end": "Ends",
+      "location": "Location",
+      "description": "Details"
+    },
+    "suggestTask": "Suggested task",
+    "suggestEvent": "Suggested event",
+    "suggestEdit": "Suggested change to “{title}”",
+    "actionTask": "Create task",
+    "actionEvent": "Create event",
+    "actionEdit": "Edit task",
+    "dismiss": "Dismiss",
+    "suggestionApplied": "Applied",
+    "suggestionDismissed": "Dismissed",
+    "suggestionWho": "Only people who can assign tasks in this chat can apply it",
+    "modeOn": "AI mode is on",
+    "modeBadge": "AI",
+    "modeReadable": "AI mode is on in this chat: messages sent while it's on can be read by a large language model (LLM) to answer @Sasa questions and suggest tasks. Messages from before it was switched on are not read.",
+    "modeHowTo": "Mention @Sasa in a message to ask a question. Each question uses 1 credit.",
+    "modeEnabled": "AI mode switched on",
+    "modeDisabled": "AI mode switched off",
+    "enableTitle": "Switch on AI mode?",
+    "disableTitle": "Switch off AI mode?",
+    "enableBody": "New messages in this chat will be readable by Sasa, a large language model. Sasa stays visible at the top of the chat so everyone knows.",
+    "disableBody": "New messages won't be readable by Sasa, and @Sasa questions stop working.",
+    "enablePoint1": "Members can ask @Sasa things like what was discussed earlier or which tasks and events the chat has.",
+    "enablePoint2": "Sasa watches for messages that assign or change tasks and offers a one-click way to create or edit them.",
+    "enablePoint3": "Earlier messages are not read; content is processed by UCSB's AI service.",
+    "enable": "Switch on",
+    "disable": "Switch off",
+    "creditsUnlimited": "Unlimited",
+    "creditsLeft": "{balance}/{allowance}",
+    "creditsTitle": "This week's credits",
+    "creditsRules": "Each question uses 1 credit; an unrelated question uses 2 in total and can be appealed. Failed answers are refunded automatically.",
+    "creditsReset": "Next refresh: {when}",
+    "placeholder": "Ask Sasa…",
+    "notConfigured": "Sasa isn't available yet",
+    "noCredits": "You've used this week's credits; they refresh Sunday at 8 AM Pacific",
+    "waiting": "Sasa is still answering your last question",
+    "askHint": "This message goes to Sasa and uses 1 credit ({balance} left)",
+    "askHintUnlimited": "This message goes to Sasa",
+    "open": "Open Sasa",
+    "chatTitle": "Sasa",
+    "close": "Close",
+    "onBehalfOf": "Posted by Sasa on behalf of {name}",
+    "attachedDoc": "Document given to Sasa with the question",
+    "docAttach": "Attach document",
+    "docRemove": "Remove document",
+    "docSearch": "Search document titles",
+    "docSharedHint": "Only documents everyone in this chat can open: this chat's documents, documents of its tasks, and Files documents outside the presidium space.",
+    "docPrivateHint": "Any document you can open, up to 3.",
+    "docLoading": "Loading…",
+    "docNone": "No documents to attach",
+    "docWhere": {
+      "chat": "Chat document",
+      "task": "Task document",
+      "file": "Files"
+    },
+    "docBalance": "({balance} left)",
+    "writeButton": "Write with Sasa",
+    "writeTitle": "Ask Sasa to write",
+    "writeBody": "Describe what you want. Sasa reads the current document and shows you a preview first; you choose whether to replace, insert or append it.",
+    "writePresetLabel": {
+      "notes": "Meeting notes",
+      "brainstorm": "Brainstorm",
+      "polish": "Polish",
+      "outline": "Key points"
+    },
+    "writePreset": {
+      "notes": "Turn the notes in this document (possibly a speech transcript) into meeting notes: topics, discussion points, decisions, and action items (who, by when).",
+      "brainstorm": "Brainstorm 10 concrete, doable CSSA activity ideas around this document's topic, each with a one-line description.",
+      "polish": "Polish the whole document so it reads clearly and is well organized, without changing its meaning.",
+      "outline": "Pull out the key points of this document and list every action item."
+    },
+    "writePlaceholder": "e.g. Turn this transcript into meeting notes",
+    "writeCost": "Uses {cost} credits; requests unrelated to CSSA are refused (you can appeal).",
+    "writeSubmit": "Write",
+    "draftTitle": "Sasa's draft (only you can see it)",
+    "draftApplied": "Added to the document; you can undo it",
+    "draftAppend": "Append to end",
+    "draftInsert": "Insert at cursor",
+    "draftReplace": "Replace all",
+    "draftDiscard": "Discard",
+    "summaryTitle": "Sasa's summary",
+    "summaryBy": "Generated by {name} {time}",
+    "summaryGenerate": "Summarize",
+    "summaryRegenerate": "Regenerate",
+    "summaryCost": "Each summary uses {cost} credit.",
+    "summaryWorking": "Sasa is reading the document",
+    "summaryWorkingOther": "Someone is having Sasa update the summary",
+    "summaryFailed": "The last attempt failed; the credit was refunded.",
+    "summaryOutdated": "The document changed after this summary",
+    "summaryShared": "The summary is saved with the document; everyone who can open it can see it.",
+    "summaryEmpty": "Have Sasa summarize this document and find the tasks, events, announcements to send, and changes to existing tasks in it.",
+    "foundTasks": "Tasks and events ({count})",
+    "pickChat": "Choose a chat",
+    "createAllDrafts": "Create all as drafts ({count})",
+    "createDraft": "Create draft",
+    "draftCreated": "Draft created",
+    "draftsCreated": "Created {count} drafts; nobody is notified until you publish",
+    "draftsHint": "Drafts notify nobody and can be edited before publishing.",
+    "tasksWho": "Only people who can create tasks in the chat (department leads, presidium) can create them.",
+    "foundAnnouncements": "Announcements to send ({count})",
+    "announcementSend": "Send announcement",
+    "announcementSent": "Sent to {chat}",
+    "announcementSentTo": "{name} sent it to {chat} ({time})",
+    "announceViaSasa": "AI mode is on in this chat, so Sasa posts it on your behalf",
+    "announceWho": "Only people who can announce in a chat (department leads, presidium, or managers of a group chat with AI mode on) can send it.",
+    "foundEdits": "Changes to existing tasks ({count})",
+    "editsWho": "Only the task's reviewers can change it."
+  },
+  "aiAdmin": {
+    "back": "Back",
+    "title": "Sasa",
+    "forbidden": "Only system admins can view this page.",
+    "appeals": "Appeals",
+    "appealsHint": "Members can appeal when they think Sasa wrongly refused a question. Approve: 2 credits back and Sasa answers for free. Deny: Sasa replies “This isn't something Sasa should handle”.",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "denied": "Denied"
+    },
+    "empty": {
+      "pending": "No appeals waiting",
+      "approved": "No approved appeals",
+      "denied": "No denied appeals"
+    },
+    "approved": "Appeal approved",
+    "denied": "Appeal denied",
+    "privateChat": "Private chat with Sasa",
+    "reason": "Refusal reason",
+    "note": "Appeal note",
+    "reviewedBy": "Reviewed by",
+    "reviewNote": "Review note",
+    "notePlaceholder": "Note (optional; shared with the member)",
+    "approve": "Approve",
+    "deny": "Deny",
+    "decisionHint": "The member is notified of the decision, and it's recorded in the audit log.",
+    "notConfigured": "AI_API_KEY isn't set on the Convex deployment, so Sasa is unavailable.",
+    "usage": "Usage this week",
+    "usageHint": "Credits refresh {reset}.",
+    "person": "Member",
+    "questions": "Questions",
+    "refused": "Refused",
+    "credits": "Credits used",
+    "noUsage": "Nobody has asked anything this week",
+    "chats": "Chats with AI mode on",
+    "chatsHint": "New messages in these chats can be read by Sasa.",
+    "noChats": "No chat has AI mode on",
+    "documentPrompt": "Document writing: {title}",
+    "remember": "Remember this decision so Sasa handles similar requests the same way",
+    "rule": "Rule",
+    "rulePlaceholder": "e.g. Quiz or trivia questions written for a CSSA event",
+    "rememberHint": "Approving saves it as \"should answer\", denying as \"shouldn't answer\". It takes effect immediately for everyone's requests. Write it as a general rule without personal details.",
+    "memory": "Sasa's memory",
+    "memoryHint": "Rules system admins have taught Sasa ({count}/{max}). They take precedence over the default rules, are read every time Sasa decides whether a request is about CSSA, and changes apply immediately.",
+    "memoryFull": "The memory is full. Remove or merge older rules first.",
+    "verdict": {
+      "allow": "Should answer",
+      "refuse": "Shouldn't answer"
+    },
+    "addRule": "Add",
+    "noRules": "No rules yet. Check \"Remember this decision\" when reviewing an appeal, or add one above.",
+    "ruleFromAppeal": "From an appeal · {name} · {time}",
+    "ruleManual": "{name} · {time}",
+    "editRule": "Edit rule",
+    "removeRule": "Delete rule",
+    "ruleAdded": "Rule added",
+    "ruleSaved": "Rule saved",
+    "ruleRemoved": "Rule deleted",
+    "save": "Save",
+    "cancel": "Cancel"
   }
 }

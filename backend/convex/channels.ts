@@ -10,7 +10,7 @@ import {
   explicitMembers,
   myChannels,
   oversees,
-  presidiumUserIds,
+  presidiumMemberIds,
   overseenUserIds,
   readBaseline,
   requireChannelAccess,
@@ -19,6 +19,7 @@ import {
   unseenAnnouncements,
   type ChannelAccess,
 } from "./lib/channels";
+import { findSasa, isAiChannelType, assistantOwner } from "./lib/ai/sasa";
 import { LIMITS, RETENTION_OPTIONS } from "./lib/constants";
 import { appError } from "./lib/errors";
 import { isLiveUserContent, messageState, postSystemMessage, type MessageState } from "./lib/messages";
@@ -44,6 +45,8 @@ export type ChannelView = {
   muted: boolean;
   ended: boolean;
   archived: boolean;
+  /** AI mode is on: new messages can be read by 小飒. */
+  aiEnabled: boolean;
   /** Chat list only: the latest non-system message. */
   preview?: ChannelPreview | null;
   /** Chat list only: up to 9 member photos for department and group chats. */
@@ -52,7 +55,7 @@ export type ChannelView = {
 
 export type ChannelPreview = {
   authorId: Id<"users">;
-  kind: "user" | "forward" | "task" | "doc";
+  kind: "user" | "forward" | "task" | "doc" | "ai";
   state: MessageState;
   /** Empty unless the message is still there. */
   body: string;
@@ -117,6 +120,7 @@ async function toChannelView(
     muted: state?.muted === true,
     ended: channel.endedAt !== undefined,
     archived: false,
+    aiEnabled: isAiChannelType(channel.type) && channel.aiEnabled === true,
   };
 
   if (countUnread) {
@@ -147,6 +151,11 @@ async function toChannelView(
     const otherId = members.find((m) => m.userId !== viewer.user._id)?.userId;
     const other = otherId ? await ctx.db.get("users", otherId) : null;
     if (other) view.otherUser = toUserSummary(other);
+  } else if (channel.type === "assistant") {
+    // Shown to overseers as "<owner> · 小飒"; the owner sees just 小飒.
+    const ownerId = assistantOwner(channel);
+    const owner = ownerId && ownerId !== viewer.user._id ? await ctx.db.get("users", ownerId) : null;
+    if (owner) view.otherUser = toUserSummary(owner);
   }
   return view;
 }
@@ -159,7 +168,7 @@ export const listMine = query({
   args: {},
   handler: async (ctx) => {
     const viewer = await requireApproved(ctx);
-    const { org, departments: departmentChannels, groups, dms: dmChannels } = await myChannels(ctx, viewer);
+    const { org, departments: departmentChannels, groups, dms: dmChannels, assistant } = await myChannels(ctx, viewer);
     const views = (list: Doc<"channels">[]) =>
       Promise.all(list.map(async (c) => withListDetails(ctx, c, await toChannelView(ctx, viewer, c))));
     return {
@@ -167,6 +176,7 @@ export const listMine = query({
       departments: await views(departmentChannels),
       groups: (await views(groups)).sort(byRecent),
       dms: (await views(dmChannels)).sort(byRecent),
+      assistant: assistant ? await withListDetails(ctx, assistant, await toChannelView(ctx, viewer, assistant)) : null,
     };
   },
 });
@@ -193,7 +203,7 @@ export const postable = query({
     const result: ChannelView[] = [];
     for (const id of ids) {
       const channel = await ctx.db.get("channels", id);
-      if (!channel) continue;
+      if (!channel || channel.type === "assistant") continue;
       const access = await channelAccess(ctx, viewer, channel);
       if (access.via === "member" && access.canPost) {
         result.push(await toChannelView(ctx, viewer, channel, false));
@@ -230,7 +240,9 @@ export const participants = query({
     const { channel, access } = await requireChannelAccess(ctx, viewer, args.channelId);
     if (access.via !== "member") return [];
     const summaries = await getUserSummaries(ctx, await channelAudience(ctx, channel));
-    return [...summaries.values()].sort((a, b) => (a.nameEn ?? "").localeCompare(b.nameEn ?? ""));
+    const people = [...summaries.values()].sort((a, b) => (a.nameEn ?? "").localeCompare(b.nameEn ?? ""));
+    const sasa = isAiChannelType(channel.type) && channel.aiEnabled ? await findSasa(ctx) : null;
+    return sasa ? [toUserSummary(sasa), ...people] : people;
   },
 });
 
@@ -238,12 +250,14 @@ export const participants = query({
 export type ChannelMember = UserSummary & {
   /** 主席团 member, or a 部长 (with the departments they lead); null for everyone else. */
   role: "presidium" | "lead" | null;
+  /** Labeled separately: a system admin isn't 主席团 unless they're also in it. Never shown in DMs. */
+  systemAdmin: boolean;
   departments: { nameZh: string; nameEn: string }[];
 };
 
-const ROLE_ORDER = { presidium: 0, lead: 1 } as const;
+const ROLE_ORDER = { presidium: 0, lead: 2 } as const;
 
-/** Everyone in the chat, for the members panel: 主席团 first, then 部长, then the rest. */
+/** Everyone in the chat, for the members panel: 主席团, then system admins, then 部长, then the rest. */
 export const members = query({
   args: { channelId: v.id("channels") },
   handler: async (ctx, args): Promise<ChannelMember[]> => {
@@ -251,7 +265,7 @@ export const members = query({
     const { channel } = await requireChannelAccess(ctx, viewer, args.channelId);
     const ids = await channelAudience(ctx, channel);
     const people = await getUserSummaries(ctx, ids);
-    const presidium = new Set(channel.type === "dm" ? [] : await presidiumUserIds(ctx));
+    const presidium = new Set(channel.type === "dm" ? [] : await presidiumMemberIds(ctx));
     const result: ChannelMember[] = [];
     for (const id of ids) {
       const person = people.get(id);
@@ -271,9 +285,10 @@ export const members = query({
         }
       }
       const role = presidium.has(id) ? "presidium" : led.length > 0 ? "lead" : null;
-      result.push({ ...person, role, departments: role === "lead" ? led : [] });
+      const systemAdmin = channel.type !== "dm" && person.isSystemAdmin;
+      result.push({ ...person, role, systemAdmin, departments: role === "lead" ? led : [] });
     }
-    const rank = (m: ChannelMember) => (m.role ? ROLE_ORDER[m.role] : 2);
+    const rank = (m: ChannelMember) => (m.role === "presidium" ? 0 : m.systemAdmin ? 1 : m.role ? ROLE_ORDER[m.role] : 3);
     return result.sort(
       (a, b) => rank(a) - rank(b) || (a.nameZh || a.name || "").localeCompare(b.nameZh || b.name || "", "zh"),
     );
@@ -503,7 +518,10 @@ export const oversightChannels = query({
     for (const row of rows) {
       const channel = await ctx.db.get("channels", row.channelId);
       if (!channel) continue;
-      if (channel.type === "dm" || (channel.type === "group" && row.joinedAt !== undefined)) {
+      if (
+        channel.type === "dm" ||
+        ((channel.type === "group" || channel.type === "assistant") && row.joinedAt !== undefined)
+      ) {
         candidates.set(channel._id, channel);
       }
     }

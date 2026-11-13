@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { assistantKey, assistantOwner } from "./ai/sasa";
 import { LIMITS } from "./constants";
 import { appError } from "./errors";
 import { isLiveUserContent } from "./messages";
@@ -58,13 +59,13 @@ export async function channelMemberRow(
     .unique();
 }
 
-/** Explicit members of a DM (every row) or group (rows with joinedAt). */
+/** Explicit members of a DM (every row), group or private 小飒 chat (rows with joinedAt). */
 export async function explicitMembers(ctx: QueryCtx, channel: Doc<"channels">) {
   const rows = await ctx.db
     .query("channelMembers")
     .withIndex("by_channel", (q) => q.eq("channelId", channel._id))
     .collect();
-  return channel.type === "group" ? rows.filter((r) => r.joinedAt !== undefined) : rows;
+  return channel.type === "dm" ? rows : rows.filter((r) => r.joinedAt !== undefined);
 }
 
 export async function groupDepartmentIds(ctx: QueryCtx, channelId: Id<"channels">) {
@@ -138,11 +139,17 @@ async function isParticipant(
       if (departmentIds.some((id) => viewer.ledDepartmentIds.includes(id))) return true;
       return viewer.isAdmin && (await isTakenOver(ctx, departmentIds));
     }
+    case "assistant":
+      return assistantOwner(channel) === viewer.user._id;
   }
 }
 
 /** People whose content is in the channel, for oversight checks. */
 async function contentOwners(ctx: QueryCtx, channel: Doc<"channels">): Promise<Id<"users">[]> {
+  if (channel.type === "assistant") {
+    const owner = assistantOwner(channel);
+    return owner ? [owner] : [];
+  }
   if (channel.type === "dm" || channel.type === "group") {
     return (await explicitMembers(ctx, channel)).map((r) => r.userId);
   }
@@ -191,7 +198,7 @@ export async function overseenUserIds(ctx: QueryCtx, viewer: ViewerContext): Pro
 }
 
 async function canReadViaOversight(ctx: QueryCtx, viewer: ViewerContext, channel: Doc<"channels">) {
-  if (channel.type !== "dm" && channel.type !== "group" && channel.type !== "department") return false;
+  if (!["dm", "group", "department", "assistant"].includes(channel.type)) return false;
   if (viewer.isAdmin) return true;
   if (viewer.ledDepartmentIds.length === 0) return false;
   const overseen = await overseenMemberIds(ctx, viewer);
@@ -255,7 +262,8 @@ export async function channelAccess(
       break;
   }
 
-  let canSetRetention = viewer.isAdmin;
+  const assistant = channel.type === "assistant";
+  let canSetRetention = viewer.isAdmin && !assistant;
   if (channel.type === "group") canSetRetention ||= viewer.ledDepartmentIds.length > 0;
   if (channel.type === "department") canSetRetention ||= leadsChannelDepartment;
 
@@ -269,8 +277,9 @@ export async function channelAccess(
     canModerate: viewer.isAdmin,
     canSetRetention: canSetRetention && (channel.type !== "group" || writable),
     canApproveApps: writable && canApproveApps,
-    canProposeApps: writable && channel.type !== "dm",
-    canMentionAll: canPost && (viewer.isAdmin || (channel.type === "department" && leadsChannelDepartment)),
+    canProposeApps: writable && channel.type !== "dm" && !assistant,
+    canMentionAll:
+      canPost && !assistant && (viewer.isAdmin || (channel.type === "department" && leadsChannelDepartment)),
   };
 }
 
@@ -336,7 +345,8 @@ export async function channelAudience(ctx: QueryCtx, channel: Doc<"channels">): 
 }
 
 /** Approved members of 主席团 plus system admins. */
-export async function presidiumUserIds(ctx: QueryCtx): Promise<Id<"users">[]> {
+/** Approved members of 主席团 itself (not system admins who aren't in it). */
+export async function presidiumMemberIds(ctx: QueryCtx): Promise<Id<"users">[]> {
   const ids = new Set<Id<"users">>();
   const presidiums = await ctx.db
     .query("departments")
@@ -349,13 +359,21 @@ export async function presidiumUserIds(ctx: QueryCtx): Promise<Id<"users">[]> {
       .collect();
     for (const row of rows) ids.add(row.userId);
   }
+  const users = await Promise.all([...ids].map((id) => ctx.db.get("users", id)));
+  return users.filter((u) => u?.status === "approved").map((u) => u!._id);
+}
+
+export async function systemAdminIds(ctx: QueryCtx): Promise<Id<"users">[]> {
   const admins = await ctx.db
     .query("users")
     .withIndex("by_isSystemAdmin", (q) => q.eq("isSystemAdmin", true))
     .collect();
-  for (const admin of admins) ids.add(admin._id);
-  const users = await Promise.all([...ids].map((id) => ctx.db.get("users", id)));
-  return users.filter((u) => u?.status === "approved").map((u) => u!._id);
+  return admins.filter((u) => u.status === "approved").map((u) => u._id);
+}
+
+/** Everyone with 主席团-level access: 主席团 members and system admins. */
+export async function presidiumUserIds(ctx: QueryCtx): Promise<Id<"users">[]> {
+  return [...new Set([...(await presidiumMemberIds(ctx)), ...(await systemAdminIds(ctx))])];
 }
 
 /** Messages before this count as read (and announcements as seen) for a channel the user never opened. */
@@ -459,5 +477,9 @@ export async function myChannels(ctx: QueryCtx, viewer: ViewerContext) {
     const group = await ctx.db.get("channels", id);
     if (group) groups.push(group);
   }
-  return { org, departments: departmentChannels, groups, dms: dmChannels };
+  const assistant = await ctx.db
+    .query("channels")
+    .withIndex("by_dmKey", (q) => q.eq("dmKey", assistantKey(viewer.user._id)))
+    .unique();
+  return { org, departments: departmentChannels, groups, dms: dmChannels, assistant };
 }

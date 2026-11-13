@@ -45,6 +45,9 @@ const ACTIONS = [
   "group.create",
   "group.end",
   "channel.retention_change",
+  "channel.ai_mode",
+  "ai.appeal_review",
+  "ai.memory_change",
   "message.moderate_remove",
   "oversight.channel.open",
 ] as const;

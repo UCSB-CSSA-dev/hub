@@ -9,7 +9,13 @@ export type ChannelDetail = NonNullable<FunctionReturnType<typeof api.channels.g
 export type Message = FunctionReturnType<typeof api.messages.list>["page"][number];
 export type Person = Message["people"][number];
 
-type Labels = { general: string; orgAnnouncements: string; announcementOf: (department: string) => string };
+type Labels = {
+  general: string;
+  orgAnnouncements: string;
+  announcementOf: (department: string) => string;
+  sasa: string;
+  sasaOf: (owner: string) => string;
+};
 
 /**
  * Display name for any channel. DMs seen through oversight show both people ("A ↔ B"),
@@ -39,6 +45,10 @@ export function channelName(
       }
       return displayName(channel.otherUser, locale);
     }
+    case "assistant":
+      return channel.otherUser && channel.otherUser._id !== viewerId
+        ? labels.sasaOf(displayName(channel.otherUser, locale))
+        : labels.sasa;
   }
 }
 

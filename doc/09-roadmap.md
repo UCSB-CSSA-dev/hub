@@ -6,11 +6,11 @@ Build in **stages**. Each stage ends with something usable, and later stages bui
 flowchart LR
   S1["Stage 1: Shell, hierarchy, sign-in, basic chat"] --> S2["Stage 2: Full chat and oversight"]
   S2 --> S3["Stage 3: Files, assignments, email"]
-  S3 --> S4["Stage 4: AI embedding (TBA)"]
+  S3 --> S4["Stage 4: AI assistant 小飒"]
   S4 --> S5["Stage 5: Polish"]
 ```
 
-Stage 1 is fixed. Stages 2 to 5 are a proposal and can be reordered. Stage 4 is a placeholder until its scope is decided.
+Stage 1 is fixed. Stages 2 to 5 are a proposal and can be reordered.
 
 ---
 
@@ -526,22 +526,71 @@ Decisions for this stage (2026-10-22):
 - [ ] 部长 run a real event (helpers, time, place, prep tasks) end to end in the app, including file submissions and reviews.
 - [ ] Everyone with open tasks gets one digest every morning without anyone sending it by hand, and people with nothing get none.
 
-## Stage 4: AI embedding (AI 功能) - TBA
+## Stage 4: AI assistant 小飒 (AI 助手)
 
-**To be decided.** Scope, features, and providers will be specified before this stage starts. Do not build anything for this stage yet.
+**Goal:** members get quick answers about their work without digging through chats and task lists, and tasks handed out in chat become real tasks with one click. Spec: [features/ai-assistant.md](features/ai-assistant.md).
 
-Ideas to discuss (not commitments):
+Decisions for this stage (2026-11-13):
+- **Provider:** the UCSB College of Letters & Science AI service (OpenAI-compatible). A fast model for the relevance filter and task suggestions, a larger one for answers. The key lives only in Convex environment variables.
+- **AI mode:** per chat, off by default, in 全体, department and group chats only; switched by 主席团 and system admins taking part in the chat. Only messages sent while it's on can be read, and the header always shows 小飒 while it's on.
+- **No embeddings.** Context comes from the existing search index plus recent messages, tasks and 集会, so nothing new is stored about members' content.
+- **Credits:** weekly per role (system admins unlimited, 主席团 25, 部长 15, others 5), refreshed Sunday 08:00 Pacific, with appeals to system admins for off-topic refusals.
 
-- Semantic search across messages, files, and assignments using embeddings (Convex supports vector indexes natively).
-- Ask questions about the organization's documents ("去年迎新晚会的预算是多少？").
-- Summaries of long channels or catch-up digests ("what did I miss in 活动部 this week").
-- Help drafting assignment descriptions or announcements.
+### 4.1 Foundations
 
-Constraints any AI feature must respect:
+- [x] Bot user 小飒 (`users.isBot`), `aiRequests`, `aiCreditAdjustments`, `aiAppeals`, `aiSuggestions`; `channels.aiEnabled*`, `messages.kind: "ai"`, `messages.aiReadable`, `messages.ai`
+- [x] Model client: streaming, `<think>` stripping, lenient JSON, timeout, dry run; `npm run ai:env` copies `AI_*` from the root `.env` into Convex
+- [x] Weekly credits by role, Pacific Sunday 08:00 week (DST aware), one question in flight, refunds on failure, stale-request sweep and 35-day ledger cleanup crons
+- [x] Animated avatars (`idle.gif`, `think.gif`) resized by `npm run brand`, with still frames for reduced motion
 
-- **Permissions apply to AI too.** Retrieval must only return content the asking user can already read under [02-roles-and-permissions.md](02-roles-and-permissions.md). Filter search results by permission before passing anything to a model.
-- Decide which content is sent to an external AI provider, and update the signup notice if member content leaves the app.
-- Bilingual: works for Chinese and English content and questions.
+### 4.2 AI mode and @小飒
+
+- [x] Toggle in the chat menu for 主席团 and system admins (confirm dialog, system message, `channel.ai_mode` audit row)
+- [x] Header indicator with the "readable by an LLM" popover; sparkle badge in the chat list
+- [x] `@小飒` / `@Sasa` questions: relevance filter, context from the chat's readable messages, tasks and 集会, streamed answer with think and idle animations, reply notification
+- [x] Composer hints with the remaining credits; blocked at 0 credits or while a question is in flight
+
+### 4.3 Private chat
+
+- [x] `assistant` channel per user (pinned in the chat list), floating button with a side panel on every other page, credit badge
+- [x] Context from the member's tasks, events, 集会 and AI-mode chats they take part in (never oversight); overseeable like a DM
+
+### 4.4 Filter and appeals
+
+- [x] Refusal card (2 credits in total) with an appeal (once, within 7 days, optional note)
+- [x] /admin/ai for system admins: pending, approved and denied appeals; weekly usage; chats with AI mode on
+- [x] `ai_appeal` and `ai_appeal_reviewed` notifications and pushes; `ai.appeal_review` audit row
+- [x] Filter memory: appeal reviews can save a rule, managed under 小飒的记忆 on /admin/ai, read by every filter call (`aiFilterMemory`, `ai.memory_change` audit row)
+
+### 4.5 Task suggestions
+
+- [x] Keyword pre-filter, per-chat hourly scan limit, server-side validation of assignees, dates and the edited task
+- [x] Suggestion card mentioning the assignees; create, edit and dismiss for people allowed to; prefilled task form (`?s=`) that marks the card applied, and adds new assignees to open tasks
+
+### 4.6 Documents
+
+- [x] `documents.text` plain-text copy kept on every save, for 小飒
+- [x] Questions about documents: attach up to 3 to a question (any readable one in the private chat, only shared-safe ones in shared chats)
+- [x] Document summary for 1 credit, saved under the document with an "outdated" marker: tasks and events become drafts (one by one or all), found announcements are edited and sent (by 小飒 in AI-mode chats), changes to existing tasks open the prefilled task form
+- [x] Writing with a prompt for 2 credits (presets for meeting notes, brainstorm, polish, outline): filtered and appealable, streamed into a private draft the editor appends, inserts or uses to replace the document
+- [x] Dictation with the browser's Web Speech API (no 小飒, no credits), Chinese or English; new documents can start blank, with dictation, or with a 小飒 draft
+
+### 4.7 Consent and docs
+
+- [x] Signup notice v3 with the AI bullet (amended for documents and dictation before release); privacy policy section
+- [x] Docs: feature spec, permissions, data model, security and privacy, decisions
+
+### Exit criteria
+
+- [ ] A 主席团 member switches AI mode on in a department chat, and everyone sees 小飒 in the header with the popover.
+- [ ] Asking `@小飒 上周我们讨论了什么？` answers from messages sent after AI mode was switched on and nothing earlier.
+- [ ] "@小明 周五前把海报做好" produces a card; the 部长 creates the task from it in two clicks and the card shows 已采纳.
+- [ ] A 部员 with 5 credits can't ask a 6th question that week, gets them back on Sunday at 08:00 Pacific, and a failed answer doesn't use one.
+- [ ] Asking for homework help is refused, the appeal reaches the system admins, and approving it returns the credits with an answer.
+- [ ] A 部长's private 小飒 never mentions content from chats they can only read through oversight.
+- [ ] A 部长 dictates a meeting into a new document, has 小飒 turn it into meeting notes, then generates a summary and creates all found tasks as drafts; nobody is notified until they publish.
+- [ ] An announcement found in a group chat's document is posted by 小飒 "on behalf of" the group manager when the chat has AI mode on.
+- [ ] In a department chat, the 小飒 document picker never offers a 主席团 Files document or another chat's document.
 
 ## Stage 5: Polish (完善)
 

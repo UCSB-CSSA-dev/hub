@@ -1,7 +1,7 @@
 // Shared with the frontend (imported via @cssa-hub/backend). Keep free of server-only imports.
 
-/** v2 (Stage 2): retention, recall, the monitored icon, and public profiles. */
-export const CURRENT_CONSENT_VERSION = 2;
+/** v2 (Stage 2): retention, recall, the monitored icon, and public profiles. v3 (Stage 4): the AI assistant 小飒. */
+export const CURRENT_CONSENT_VERSION = 3;
 
 export const DEFAULT_ALLOWED_EMAIL_DOMAIN = "ucsb.edu";
 
@@ -109,7 +109,56 @@ export const LIMITS = {
   digestMessageChars: 200,
   digestEmail: 254,
   emailAttempts: 5,
+
+  // AI assistant 小飒 (Stage 4)
+  /** Characters of chat history and tasks sent to the model with one question. */
+  aiContextChars: 40_000,
+  /** Newest AI-readable messages considered per chat, before keyword hits are added. */
+  aiRecentMessages: 300,
+  aiKeywordHits: 60,
+  /** Earlier turns of the private Sasa chat sent along with a question. */
+  aiPrivateTurns: 10,
+  /** Model calls for automatic task suggestions, per chat per hour. */
+  aiScansPerChannelHour: 60,
+  aiAppealNote: 500,
+  aiAppealWindowMs: 7 * 24 * 60 * 60 * 1000,
+  /** Relevance-filter rules taught by system admins; all of them go into every filter call. */
+  aiMemoryRule: 300,
+  aiMemoryRules: 60,
+  /** A request still pending after this is treated as abandoned (no longer blocks new questions). */
+  aiStaleRequestMs: 5 * 60 * 1000,
+  aiRequestTimeoutMs: 90_000,
+  /** Document summaries and writing read and produce more text. */
+  aiDocTimeoutMs: 180_000,
+  /** How often a streamed answer is written to the message while it's being generated. */
+  aiStreamFlushMs: 400,
+  aiStreamFlushChars: 200,
+  /** Request and adjustment rows are kept this long for the weekly balance and admin stats. */
+  aiLedgerDays: 35,
+  /** Plain-text copy of a document kept for 小飒. */
+  aiDocText: 30_000,
+  /** Document text sent with one summary, writing prompt, or question (split across attached documents). */
+  aiDocContextChars: 24_000,
+  aiDocsPerQuestion: 3,
+  aiDocPrompt: 2_000,
+  aiDocDraftChars: 20_000,
+  aiDocSummaryChars: 4_000,
+  aiDocTasks: 20,
+  aiDocAnnouncements: 5,
+  aiDocEdits: 10,
+  /** Documents offered in the composer's picker. */
+  aiDocChoices: 30,
 } as const;
+
+/** Weekly 小飒 credits by role (the highest role wins). System admins are unlimited. */
+export const AI_CREDITS = { presidium: 25, lead: 15, member: 5 } as const;
+/** Credits refresh every Sunday at 08:00 Pacific time. */
+export const AI_RESET = { weekday: 0, hour: 8 } as const;
+export const AI_IRRELEVANT_COST = 2;
+/** Credits per document request: summary and extraction, or writing with a prompt. */
+export const AI_DOC_COST = { summary: 1, write: 2 } as const;
+
+export const SASA = { nameZh: "小飒", nameEn: "Sasa" } as const;
 
 /** Times are entered and shown in Pacific time (UCSB). */
 export const TIME_ZONE = "America/Los_Angeles";
@@ -154,6 +203,8 @@ export const NOTIFICATION_TYPES = [
   "assignment_comment",
   "doc_mention",
   "task_mention",
+  "ai_appeal",
+  "ai_appeal_reviewed",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -188,6 +239,14 @@ export const ERROR_CODES = [
   "DRIVE_NOT_CONFIGURED",
   /** Google Drive refused the upload (full, or the Apps Script failed). */
   "DRIVE_FAILED",
+  /** No 小飒 credits left this week. */
+  "AI_NO_CREDITS",
+  /** The previous question to 小飒 is still being answered. */
+  "AI_BUSY",
+  /** AI mode is off in this chat. */
+  "AI_NOT_ENABLED",
+  /** AI_API_KEY isn't set on the deployment. */
+  "AI_NOT_CONFIGURED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

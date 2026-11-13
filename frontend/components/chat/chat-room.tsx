@@ -23,11 +23,15 @@ export function ChatRoom({
   backHref,
   initialFocus,
   initialApp,
+  onClose,
 }: {
   channel: ChannelDetail;
-  backHref: string;
+  /** Unset when embedded in the floating 小飒 panel. */
+  backHref?: string;
   initialFocus: Id<"messages"> | null;
   initialApp: Id<"chatApps"> | null;
+  /** Shows a close button; used by the floating 小飒 panel. */
+  onClose?: () => void;
 }) {
   const t = useTranslations("chat");
   const name = useChannelName()(channel);
@@ -110,9 +114,10 @@ export function ChatRoom({
         onEndedApps={() => setEndedOpen(true)}
         onDocuments={() => setDocsOpen(true)}
         onNewDocument={() => setNewDocOpen(true)}
+        onClose={onClose}
       />
       <AnnouncementBar />
-      <AppBar onOpen={setAppId} />
+      {channel.type === "assistant" ? null : <AppBar onOpen={setAppId} />}
       <MessageView focusId={focusId} onLeaveFocus={() => setFocusId(null)} />
       {selecting ? <SelectionBar /> : <Composer name={name} />}
 
@@ -129,7 +134,7 @@ export function ChatRoom({
       {channel.type === "group" ? (
         <GroupInfoSheet channelId={channel._id} open={groupOpen} onOpenChange={setGroupOpen} />
       ) : null}
-      {channel.type !== "dm" ? (
+      {channel.type !== "dm" && channel.type !== "assistant" ? (
         <EndedAppsDialog channelId={channel._id} open={endedOpen} onOpenChange={setEndedOpen} onOpenApp={setAppId} />
       ) : null}
       {chatHasDocs(channel.type) ? (

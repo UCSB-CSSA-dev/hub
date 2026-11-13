@@ -49,6 +49,9 @@ const TEXT = {
     assignmentComment: "{actor} 评论了「{title}」",
     docMention: "{actor} 在文档「{title}」中提到了你",
     taskMention: "{actor} 在{kind}「{title}」中提到了你",
+    aiAppeal: "{actor} 对小飒的拒绝提出了申诉",
+    aiAppealApproved: "你的申诉已通过，小飒会回答你的问题",
+    aiAppealDenied: "你的申诉未通过",
     task: "任务",
     event: "活动",
     signup: "接龙",
@@ -93,6 +96,9 @@ const TEXT = {
     assignmentComment: '{actor} commented on "{title}"',
     docMention: '{actor} mentioned you in "{title}"',
     taskMention: '{actor} mentioned you in the {kind} "{title}"',
+    aiAppeal: "{actor} appealed a refusal by Sasa",
+    aiAppealApproved: "Your appeal was approved; Sasa will answer your question",
+    aiAppealDenied: "Your appeal was declined",
     task: "task",
     event: "event",
     signup: "Sign-up",
@@ -211,5 +217,9 @@ export function pushText(input: PushInput, locale: PushLocale, lookup: PushLooku
       return { title: t("docMention", { actor: person("actorId"), title }) };
     case "task_mention":
       return { title: t("taskMention", { actor: person("actorId"), kind: taskKind(), title }) };
+    case "ai_appeal":
+      return { title: t("aiAppeal", { actor: person("actorId") }), body: preview };
+    case "ai_appeal_reviewed":
+      return { title: t(params.approved ? "aiAppealApproved" : "aiAppealDenied"), body: note };
   }
 }

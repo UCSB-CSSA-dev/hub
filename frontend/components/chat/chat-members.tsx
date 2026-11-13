@@ -83,6 +83,11 @@ function MembersList() {
                       {t(member.role)}
                     </Badge>
                   ) : null}
+                  {member.systemAdmin ? (
+                    <Badge variant="outline" className="shrink-0">
+                      {t("systemAdmin")}
+                    </Badge>
+                  ) : null}
                 </li>
               ))}
           {members && shown.length === 0 ? (

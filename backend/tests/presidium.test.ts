@@ -150,11 +150,19 @@ describe("主席团 chat", () => {
     ).rejects.toThrow(/NOT_FOUND/);
 
     const members = await chair.as.query(api.channels.members, { channelId: chat!._id });
-    expect(members.find((m) => m._id === chair.userId)?.role).toBe("presidium");
+    expect(members.find((m) => m._id === chair.userId)).toMatchObject({ role: "presidium", systemAdmin: false });
     expect(members.find((m) => m._id === lead.userId)).toMatchObject({
       role: "lead",
       departments: [expect.objectContaining({ nameEn: "Events" })],
     });
     expect(members.some((m) => m._id === member.userId)).toBe(false);
+
+    // A system admin outside 主席团 is labeled as a system admin, not 主席团, and listed after 主席团.
+    const [org] = (await member.as.query(api.channels.listMine, {})).org;
+    const everyone = await member.as.query(api.channels.members, { channelId: org._id });
+    const index = (id: string) => everyone.findIndex((m) => m._id === id);
+    expect(everyone[index(admin.userId)]).toMatchObject({ role: null, systemAdmin: true });
+    expect(index(chair.userId)).toBeLessThan(index(admin.userId));
+    expect(index(admin.userId)).toBeLessThan(index(lead.userId));
   });
 });
