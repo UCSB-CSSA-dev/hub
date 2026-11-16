@@ -28,7 +28,7 @@ import { creditState, creditWeek, inFlightRequest } from "./lib/ai/credits";
 import { settleDocRequest } from "./lib/ai/docs";
 import { startAnswer, startDocWrite } from "./lib/ai/flow";
 import { addRule, filterMemory } from "./lib/ai/memory";
-import { answerPrompt, createIntentPrompt, filterPrompt, scanPrompt } from "./lib/ai/prompts";
+import { answerPrompt, filterPrompt, scanPrompt } from "./lib/ai/prompts";
 import { aiConfigured, assistantKey, ensureSasa, isAiChannelType } from "./lib/ai/sasa";
 import { canActOnSuggestion, parseWhen } from "./lib/ai/suggestions";
 import { AI_IRRELEVANT_COST, LIMITS } from "./lib/constants";
@@ -37,7 +37,6 @@ import { appError } from "./lib/errors";
 import { isLiveUserContent, postSystemMessage } from "./lib/messages";
 import { chatLink, notify, notifyMany } from "./lib/notify";
 import { buildViewerContext, requireApproved, requireSystemAdmin, type ViewerContext } from "./lib/permissions";
-import { canCreateTaskIn } from "./lib/tasks";
 import { mentionToken, toSearchText } from "./lib/text";
 import { getUserSummaries, type UserSummary } from "./lib/users";
 
@@ -211,7 +210,6 @@ export const answerContext = internalQuery({
       sections.push(`<document title="${doc.title.replace(/"/g, "'")}">\n${text || "(empty)"}\n</document>`);
     }
 
-    let canCreateTasks = false;
     if (isPrivate) {
       const channels = await readableAiChannels(ctx, viewer);
       const tasks = await taskList(ctx, names, viewer, channels, true);
@@ -228,7 +226,6 @@ export const answerContext = internalQuery({
       history = await privateHistory(ctx, names, channel._id, question._creationTime);
     } else {
       chatName = await channelLabel(ctx, channel);
-      canCreateTasks = await canCreateTaskIn(ctx, viewer, channel);
       const tasks = await taskList(ctx, names, viewer, [channel], false);
       const meetings = await meetingList(ctx, [channel]);
       if (tasks) sections.push(`<tasks_and_events>\n${tasks}\n</tasks_and_events>`);
@@ -248,7 +245,6 @@ export const answerContext = internalQuery({
       history,
       question: await names.text(question.body),
       documents: documents.length > 0,
-      canCreateTasks,
     });
   },
 });
@@ -695,45 +691,6 @@ export const overview = query({
 // ---------------------------------------------------------------------------------------------
 // Task suggestions
 
-/** Members and open tasks for scan / create-intent prompts. */
-async function suggestionLists(ctx: QueryCtx, channel: Doc<"channels">, message: Doc<"messages">) {
-  const names = new Names(ctx);
-  const audience = (await channelAudience(ctx, channel)).slice(0, 200);
-  const members = await Promise.all(audience.map(async (id) => `${id}: ${await names.of(id)}`));
-  const open = (
-    await ctx.db
-      .query("assignments")
-      .withIndex("by_channel", (q) => q.eq("channelId", channel._id))
-      .order("desc")
-      .take(80)
-  ).filter((a) => a.status === "open");
-  const tasks: string[] = [];
-  for (const task of open.slice(0, 40)) {
-    const details = [
-      task.dueAt ? `due ${pacificStamp(task.dueAt)}` : "",
-      task.startAt ? `starts ${pacificStamp(task.startAt)}` : "",
-      task.location ? `at ${task.location}` : "",
-    ].filter(Boolean);
-    tasks.push(`${task._id} | ${task.kind} | ${task.title} | ${details.join(", ")}`);
-  }
-  const before = await ctx.db
-    .query("messages")
-    .withIndex("by_channel", (q) => q.eq("channelId", channel._id).lt("_creationTime", message._creationTime))
-    .order("desc")
-    .take(20);
-  const previous: string[] = [];
-  for (const row of before.reverse()) {
-    if (!row.aiReadable || !isLiveUserContent(row) || row.kind !== "user") continue;
-    previous.push(`${await names.of(row.authorId)}: ${(await names.text(row.body)).slice(0, 300)}`);
-  }
-  return {
-    names,
-    members: members.join("\n"),
-    tasks: tasks.join("\n"),
-    previous: previous.slice(-8).join("\n"),
-  };
-}
-
 export const scanJob = internalQuery({
   args: { messageId: v.id("messages") },
   handler: async (ctx, args): Promise<ChatMessage[] | null> => {
@@ -747,55 +704,44 @@ export const scanJob = internalQuery({
       .first();
     if (existing) return null;
 
-    const lists = await suggestionLists(ctx, channel, message);
+    const names = new Names(ctx);
+    const audience = (await channelAudience(ctx, channel)).slice(0, 200);
+    const members = await Promise.all(audience.map(async (id) => `${id}: ${await names.of(id)}`));
+    const open = (
+      await ctx.db
+        .query("assignments")
+        .withIndex("by_channel", (q) => q.eq("channelId", channel._id))
+        .order("desc")
+        .take(80)
+    ).filter((a) => a.status === "open");
+    const tasks: string[] = [];
+    for (const task of open.slice(0, 40)) {
+      const details = [
+        task.dueAt ? `due ${pacificStamp(task.dueAt)}` : "",
+        task.startAt ? `starts ${pacificStamp(task.startAt)}` : "",
+        task.location ? `at ${task.location}` : "",
+      ].filter(Boolean);
+      tasks.push(`${task._id} | ${task.kind} | ${task.title} | ${details.join(", ")}`);
+    }
+    const before = await ctx.db
+      .query("messages")
+      .withIndex("by_channel", (q) => q.eq("channelId", channel._id).lt("_creationTime", message._creationTime))
+      .order("desc")
+      .take(20);
+    const previous: string[] = [];
+    for (const row of before.reverse()) {
+      if (!row.aiReadable || !isLiveUserContent(row) || row.kind !== "user") continue;
+      previous.push(`${await names.of(row.authorId)}: ${(await names.text(row.body)).slice(0, 300)}`);
+    }
     return scanPrompt({
       now: nowLabel(),
       chatName: await channelLabel(ctx, channel),
-      members: lists.members,
-      tasks: lists.tasks,
-      previous: lists.previous,
-      author: await lists.names.of(message.authorId),
-      message: await lists.names.text(message.body),
+      members: members.join("\n"),
+      tasks: tasks.join("\n"),
+      previous: previous.slice(-8).join("\n"),
+      author: await names.of(message.authorId),
+      message: await names.text(message.body),
     });
-  },
-});
-
-/**
- * After a successful @小飒 answer: if the asker can create tasks here, build a create-intent prompt
- * for the question. Null when ineligible, private chat, or a suggestion already exists.
- */
-export const createIntentJob = internalQuery({
-  args: { requestId: v.id("aiRequests") },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ messageId: Id<"messages">; prompt: ChatMessage[] } | null> => {
-    const request = await ctx.db.get("aiRequests", args.requestId);
-    if (!request || request.status !== "done" || !request.questionMessageId || !request.channelId) return null;
-    const message = await ctx.db.get("messages", request.questionMessageId);
-    if (!message || !isLiveUserContent(message) || message.kind !== "user") return null;
-    const channel = await ctx.db.get("channels", request.channelId);
-    if (!channel || channel.type === "assistant" || !isAiChannelType(channel.type) || !channel.aiEnabled) return null;
-    const viewer = await viewerOf(ctx, request.userId);
-    if (!viewer || !(await canCreateTaskIn(ctx, viewer, channel))) return null;
-    const existing = await ctx.db
-      .query("aiSuggestions")
-      .withIndex("by_source", (q) => q.eq("sourceMessageId", message._id))
-      .first();
-    if (existing) return null;
-
-    const lists = await suggestionLists(ctx, channel, message);
-    return {
-      messageId: message._id,
-      prompt: createIntentPrompt({
-        now: nowLabel(),
-        chatName: await channelLabel(ctx, channel),
-        members: lists.members,
-        tasks: lists.tasks,
-        asker: await lists.names.of(message.authorId),
-        question: await lists.names.text(message.body),
-      }),
-    };
   },
 });
 
@@ -803,98 +749,94 @@ function cleanString(value: unknown, max: number) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
 }
 
-/** Validates the model's suggestion and posts 小飒's card mentioning the assignees. Shared by scan and create-intent. */
-export async function postSuggestion(ctx: MutationCtx, messageId: Id<"messages">, raw: unknown) {
-  const result = (raw ?? {}) as Record<string, unknown>;
-  const action = result.action;
-  if (action !== "create_task" && action !== "create_event" && action !== "edit") return;
-  if (typeof result.confidence === "number" && result.confidence < 0.6) return;
-  const message = await ctx.db.get("messages", messageId);
-  if (!message || !isLiveUserContent(message)) return;
-  const channel = await ctx.db.get("channels", message.channelId);
-  if (!channel || !isAiChannelType(channel.type) || !channel.aiEnabled) return;
-  const existing = await ctx.db
-    .query("aiSuggestions")
-    .withIndex("by_source", (q) => q.eq("sourceMessageId", message._id))
-    .first();
-  if (existing) return;
-
-  const now = Date.now();
-  const audience = new Set<string>(await channelAudience(ctx, channel));
-  const assigneeIds = Array.isArray(result.assigneeIds)
-    ? [
-        ...new Set(
-          result.assigneeIds.flatMap((rawId) => {
-            const id = typeof rawId === "string" ? ctx.db.normalizeId("users", rawId) : null;
-            return id && audience.has(id) ? [id] : [];
-          }),
-        ),
-      ].slice(0, 20)
-    : [];
-  const fields: Doc<"aiSuggestions">["fields"] = {
-    title: cleanString(result.title, LIMITS.taskTitle),
-    description: cleanString(result.description, 1000),
-    assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
-    dueAt: parseWhen(result.dueAt, now, true),
-    startAt: parseWhen(result.startAt, now, false),
-    endAt: parseWhen(result.endAt, now, false),
-    location: cleanString(result.location, LIMITS.taskLocation),
-  };
-  if (fields.startAt && fields.endAt && fields.endAt <= fields.startAt) fields.endAt = undefined;
-
-  let assignmentId: Id<"assignments"> | undefined;
-  if (action === "edit") {
-    const id = typeof result.assignmentId === "string" ? ctx.db.normalizeId("assignments", result.assignmentId) : null;
-    const assignment = id ? await ctx.db.get("assignments", id) : null;
-    if (!assignment || assignment.channelId !== channel._id || assignment.status !== "open") return;
-    assignmentId = assignment._id;
-    if (fields.title === assignment.title) fields.title = undefined;
-    if (fields.description === assignment.description) fields.description = undefined;
-    if (fields.location === assignment.location) fields.location = undefined;
-    if (fields.dueAt === assignment.dueAt) fields.dueAt = undefined;
-    if (fields.startAt === assignment.startAt) fields.startAt = undefined;
-    if (fields.endAt === assignment.endAt) fields.endAt = undefined;
-    if (Object.values(fields).every((value) => value === undefined)) return;
-  } else if (!fields.title) {
-    return;
-  }
-
-  const sasaId = await ensureSasa(ctx);
-  const summary = cleanString(result.summary, 300) ?? "";
-  const body = [...assigneeIds.map((id) => mentionToken(id)), summary].join(" ").trim();
-  const suggestionId = await ctx.db.insert("aiSuggestions", {
-    channelId: channel._id,
-    sourceMessageId: message._id,
-    action,
-    assignmentId,
-    fields,
-    status: "pending",
-  });
-  const cardId = await ctx.db.insert("messages", {
-    channelId: channel._id,
-    authorId: sasaId,
-    body,
-    kind: "ai",
-    replyToId: message._id,
-    mentionUserIds: assigneeIds,
-    ai: { status: "done", suggestionId },
-  });
-  await ctx.db.patch("aiSuggestions", suggestionId, { messageId: cardId });
-  await ctx.db.patch("channels", channel._id, { lastMessageAt: now });
-  for (const userId of assigneeIds) {
-    await notify(ctx, userId, {
-      type: "mention",
-      params: { actorId: sasaId, channelId: channel._id, preview: summary.slice(0, 80) },
-      link: chatLink(channel._id, cardId),
-      messageId: cardId,
-    });
-  }
-}
-
+/** Validates the model's suggestion and posts 小飒's card mentioning the assignees. */
 export const suggest = internalMutation({
   args: { messageId: v.id("messages"), result: v.any() },
   handler: async (ctx, args) => {
-    await postSuggestion(ctx, args.messageId, args.result);
+    const result = (args.result ?? {}) as Record<string, unknown>;
+    const action = result.action;
+    if (action !== "create_task" && action !== "create_event" && action !== "edit") return;
+    if (typeof result.confidence === "number" && result.confidence < 0.6) return;
+    const message = await ctx.db.get("messages", args.messageId);
+    if (!message || !isLiveUserContent(message)) return;
+    const channel = await ctx.db.get("channels", message.channelId);
+    if (!channel || !isAiChannelType(channel.type) || !channel.aiEnabled) return;
+    const existing = await ctx.db
+      .query("aiSuggestions")
+      .withIndex("by_source", (q) => q.eq("sourceMessageId", message._id))
+      .first();
+    if (existing) return;
+
+    const now = Date.now();
+    const audience = new Set<string>(await channelAudience(ctx, channel));
+    const assigneeIds = Array.isArray(result.assigneeIds)
+      ? [
+          ...new Set(
+            result.assigneeIds.flatMap((raw) => {
+              const id = typeof raw === "string" ? ctx.db.normalizeId("users", raw) : null;
+              return id && audience.has(id) ? [id] : [];
+            }),
+          ),
+        ].slice(0, 20)
+      : [];
+    const fields: Doc<"aiSuggestions">["fields"] = {
+      title: cleanString(result.title, LIMITS.taskTitle),
+      description: cleanString(result.description, 1000),
+      assigneeIds: assigneeIds.length > 0 ? assigneeIds : undefined,
+      dueAt: parseWhen(result.dueAt, now, true),
+      startAt: parseWhen(result.startAt, now, false),
+      endAt: parseWhen(result.endAt, now, false),
+      location: cleanString(result.location, LIMITS.taskLocation),
+    };
+    if (fields.startAt && fields.endAt && fields.endAt <= fields.startAt) fields.endAt = undefined;
+
+    let assignmentId: Id<"assignments"> | undefined;
+    if (action === "edit") {
+      const id = typeof result.assignmentId === "string" ? ctx.db.normalizeId("assignments", result.assignmentId) : null;
+      const assignment = id ? await ctx.db.get("assignments", id) : null;
+      if (!assignment || assignment.channelId !== channel._id || assignment.status !== "open") return;
+      assignmentId = assignment._id;
+      if (fields.title === assignment.title) fields.title = undefined;
+      if (fields.description === assignment.description) fields.description = undefined;
+      if (fields.location === assignment.location) fields.location = undefined;
+      if (fields.dueAt === assignment.dueAt) fields.dueAt = undefined;
+      if (fields.startAt === assignment.startAt) fields.startAt = undefined;
+      if (fields.endAt === assignment.endAt) fields.endAt = undefined;
+      if (Object.values(fields).every((value) => value === undefined)) return;
+    } else if (!fields.title) {
+      return;
+    }
+
+    const sasaId = await ensureSasa(ctx);
+    const summary = cleanString(result.summary, 300) ?? "";
+    const body = [...assigneeIds.map((id) => mentionToken(id)), summary].join(" ").trim();
+    const suggestionId = await ctx.db.insert("aiSuggestions", {
+      channelId: channel._id,
+      sourceMessageId: message._id,
+      action,
+      assignmentId,
+      fields,
+      status: "pending",
+    });
+    const cardId = await ctx.db.insert("messages", {
+      channelId: channel._id,
+      authorId: sasaId,
+      body,
+      kind: "ai",
+      replyToId: message._id,
+      mentionUserIds: assigneeIds,
+      ai: { status: "done", suggestionId },
+    });
+    await ctx.db.patch("aiSuggestions", suggestionId, { messageId: cardId });
+    await ctx.db.patch("channels", channel._id, { lastMessageAt: now });
+    for (const userId of assigneeIds) {
+      await notify(ctx, userId, {
+        type: "mention",
+        params: { actorId: sasaId, channelId: channel._id, preview: summary.slice(0, 80) },
+        link: chatLink(channel._id, cardId),
+        messageId: cardId,
+      });
+    }
   },
 });
 

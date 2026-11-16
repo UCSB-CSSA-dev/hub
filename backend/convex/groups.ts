@@ -103,7 +103,6 @@ async function createGroupChannel(
     name: args.name,
     purpose: args.purpose,
     createdBy: args.proposal?.proposerId ?? args.actorId,
-    approvedBy: args.proposal ? args.actorId : undefined,
     proposalId: args.proposal?._id,
     lastMessageAt: now,
   });
@@ -463,8 +462,8 @@ export const info = query({
       members,
       presidium,
       systemAdmins,
-      proposerId: channel.createdBy ?? proposal?.proposerId,
-      approverId: channel.approvedBy ?? proposal?.reviewedBy,
+      proposerId: proposal?.proposerId,
+      approverId: proposal?.reviewedBy,
       viewer: {
         canManage: access.canManage,
         canLeave: isExplicit && access.via === "member",

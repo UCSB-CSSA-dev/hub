@@ -6,15 +6,7 @@ import { channelAudience, groupDepartmentIds, touchReadState } from "./lib/chann
 import { LIMITS } from "./lib/constants";
 import { appError } from "./lib/errors";
 import { deleteTaskDocuments } from "./lib/documents";
-import {
-  ensureTaskFolder,
-  filePermission,
-  loadSpace,
-  logFileEvent,
-  spaceKey,
-  trashFolderTree,
-  upsertFileGrant,
-} from "./lib/files";
+import { loadSpace, spaceKey, trashFolderTree } from "./lib/files";
 import { notify, notifyMany } from "./lib/notify";
 import { getViewer, requireApproved, type ViewerContext } from "./lib/permissions";
 import {
@@ -149,63 +141,18 @@ async function requireAudience(ctx: QueryCtx, channel: Doc<"channels">, userIds:
   return unique;
 }
 
-/** Submission files must live in this task's folder (and usually be uploaded by the assignee). */
-async function requireSubmissionFiles(
-  ctx: QueryCtx,
-  assignment: Doc<"assignments">,
-  fileIds: Id<"files">[],
-  uploader: Id<"users">,
-) {
+/** Files must be live files in this task's folder. */
+async function requireTaskFiles(ctx: QueryCtx, assignment: Doc<"assignments">, fileIds: Id<"files">[], uploader?: Id<"users">) {
   const unique = [...new Set(fileIds)];
   if (unique.length > LIMITS.taskFiles) throw appError("INVALID", "fileIds");
   for (const id of unique) {
     const file = await ctx.db.get("files", id);
     if (!file || file.deletedAt || file.departmentId !== assignment.departmentId) throw appError("INVALID", "fileIds");
-    if (file.uploadedBy !== uploader) throw appError("INVALID", "fileIds");
+    if (uploader && file.uploadedBy !== uploader) throw appError("INVALID", "fileIds");
     const folder = file.folderId ? await ctx.db.get("folders", file.folderId) : null;
     if (folder?.assignmentId !== assignment._id) throw appError("INVALID", "fileIds");
   }
   return unique;
-}
-
-/** Creator attachments: any live file the viewer can write, in any space. */
-async function requireAttachmentFiles(ctx: QueryCtx, viewer: ViewerContext, fileIds: Id<"files">[]) {
-  const unique = [...new Set(fileIds)];
-  if (unique.length > LIMITS.taskFiles) throw appError("INVALID", "fileIds");
-  for (const id of unique) {
-    const file = await ctx.db.get("files", id);
-    if (!file || file.deletedAt) throw appError("INVALID", "fileIds");
-    const permission = await filePermission(ctx, viewer, file);
-    if (!permission.write) throw appError("INVALID", "fileIds");
-  }
-  return unique;
-}
-
-/** Grants task people access to attached files (write for assignees when the creator attaches). */
-async function grantTaskFileAccess(
-  ctx: MutationCtx,
-  viewer: ViewerContext,
-  assignment: Doc<"assignments">,
-  fileIds: Id<"files">[],
-  assigneeIds: Id<"users">[],
-) {
-  for (const fileId of fileIds) {
-    for (const userId of assigneeIds) {
-      await upsertFileGrant(ctx, {
-        fileId,
-        userId,
-        level: "write",
-        grantedBy: viewer.user._id,
-        assignmentId: assignment._id,
-      });
-    }
-    await logFileEvent(ctx, {
-      fileId,
-      actorId: viewer.user._id,
-      action: "linked_task",
-      metadata: { assignmentId: assignment._id },
-    });
-  }
 }
 
 function notificationParams(viewer: ViewerContext, assignment: Doc<"assignments">) {
@@ -257,9 +204,6 @@ async function insertAssignees(ctx: MutationCtx, viewer: ViewerContext, assignme
     });
     added.push(userId);
   }
-  if (added.length > 0 && assignment.fileIds.length > 0) {
-    await grantTaskFileAccess(ctx, viewer, assignment, assignment.fileIds, added);
-  }
   await notifyMany(
     ctx,
     added.filter((id) => id !== viewer.user._id),
@@ -293,7 +237,6 @@ async function publishDraft(ctx: MutationCtx, viewer: ViewerContext, assignment:
     draftAssigneeIds: undefined,
     draftEveryone: undefined,
   });
-  await ensureTaskFolder(ctx, assignment, viewer.user._id);
   const added = await insertAssignees(ctx, viewer, { ...assignment, status: "open" }, assignees);
   // Assignees already get "assigned to you"; a mention would only repeat it.
   await notifyDescriptionMentions(ctx, viewer, assignment, channel, { skip: added });
@@ -349,9 +292,7 @@ export const create = mutation({
       draftAssigneeIds: assigneeIds,
       draftEveryone: args.everyone || undefined,
     });
-    const created = (await ctx.db.get("assignments", assignmentId))!;
-    await ensureTaskFolder(ctx, created, viewer.user._id);
-    if (args.publish) await publishDraft(ctx, viewer, created, channel);
+    if (args.publish) await publishDraft(ctx, viewer, (await ctx.db.get("assignments", assignmentId))!, channel);
     await markSuggestionApplied(ctx, viewer, args.suggestionId, channel._id);
     return assignmentId;
   },
@@ -392,7 +333,7 @@ export async function createDraftFromDocument(
   );
   const audience = new Set(await channelAudience(ctx, channel));
   const assigneeIds = [...new Set(item.assigneeIds)].filter((id) => audience.has(id)).slice(0, LIMITS.taskAssignees);
-  const assignmentId = await ctx.db.insert("assignments", {
+  return ctx.db.insert("assignments", {
     ...draft,
     createdBy: viewer.user._id,
     channelId: channel._id,
@@ -400,9 +341,6 @@ export async function createDraftFromDocument(
     fileIds: [],
     draftAssigneeIds: assigneeIds,
   });
-  const created = (await ctx.db.get("assignments", assignmentId))!;
-  await ensureTaskFolder(ctx, created, viewer.user._id);
-  return assignmentId;
 }
 
 export const update = mutation({
@@ -437,20 +375,7 @@ export const update = mutation({
       assignment,
     );
     const patch: Partial<Doc<"assignments">> = { ...draft };
-    if (args.fileIds) {
-      const fileIds = await requireAttachmentFiles(ctx, viewer, args.fileIds);
-      patch.fileIds = fileIds;
-      const added = fileIds.filter((id) => !assignment.fileIds.includes(id));
-      if (added.length > 0) {
-        const rows = await ctx.db
-          .query("assignmentSubmissions")
-          .withIndex("by_assignment", (q) => q.eq("assignmentId", assignment._id))
-          .collect();
-        const people =
-          rows.length > 0 ? rows.map((r) => r.assigneeId) : (assignment.draftAssigneeIds ?? []);
-        await grantTaskFileAccess(ctx, viewer, assignment, added, people);
-      }
-    }
+    if (args.fileIds) patch.fileIds = await requireTaskFiles(ctx, assignment, args.fileIds);
     if (assignment.status === "draft") {
       if (args.assigneeIds) patch.draftAssigneeIds = await requireAudience(ctx, channel, args.assigneeIds);
       if (args.everyone !== undefined) patch.draftEveryone = args.everyone || undefined;
@@ -594,7 +519,7 @@ export const submit = mutation({
     if (row.status === "approved") throw appError("ALREADY_REVIEWED");
     const text = cleanText(args.text, LIMITS.submissionText, "text");
     const link = cleanLink(args.link);
-    const fileIds = await requireSubmissionFiles(ctx, assignment, args.fileIds, viewer.user._id);
+    const fileIds = await requireTaskFiles(ctx, assignment, args.fileIds, viewer.user._id);
     if (!text && !link && fileIds.length === 0) throw appError("INVALID", "empty");
     const now = Date.now();
     await ctx.db.patch("assignmentSubmissions", row._id, {

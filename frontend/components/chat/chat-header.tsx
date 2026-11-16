@@ -33,9 +33,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -148,41 +145,12 @@ export function ChatHeader({
               {t("groupInfo")}
             </DropdownMenuItem>
           ) : null}
-          {isMember && channel.muted ? (
-            <DropdownMenuItem onSelect={() => setMuted({ channelId: channel._id, muted: false }).catch(showError)}>
-              <BellIcon />
-              {t("unmute")}
-            </DropdownMenuItem>
-          ) : null}
-          {isMember && !channel.muted && (channel.type === "org" || channel.type === "department") ? (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <BellOffIcon />
-                {t("muteFor")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  onSelect={() => setMuted({ channelId: channel._id, muted: true, duration: "30m" }).catch(showError)}
-                >
-                  {t("mute30m")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => setMuted({ channelId: channel._id, muted: true, duration: "1h" }).catch(showError)}
-                >
-                  {t("mute1h")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => setMuted({ channelId: channel._id, muted: true, duration: "1d" }).catch(showError)}
-                >
-                  {t("mute1d")}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          ) : null}
-          {isMember && !channel.muted && channel.type !== "org" && channel.type !== "department" ? (
-            <DropdownMenuItem onSelect={() => setMuted({ channelId: channel._id, muted: true }).catch(showError)}>
-              <BellOffIcon />
-              {t("mute")}
+          {isMember ? (
+            <DropdownMenuItem
+              onSelect={() => setMuted({ channelId: channel._id, muted: !channel.muted }).catch(showError)}
+            >
+              {channel.muted ? <BellIcon /> : <BellOffIcon />}
+              {channel.muted ? t("unmute") : t("mute")}
             </DropdownMenuItem>
           ) : null}
           {canToggleAi ? (

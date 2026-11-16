@@ -27,7 +27,6 @@ import { useErrorToast } from "@/lib/errors";
 import type { Locale } from "@/lib/locale-store";
 import { displayName, localized } from "@/lib/names";
 import { cn } from "@/lib/utils";
-import { MemberPeek, type PeekMember } from "@/components/chat/member-peek";
 import { PeopleChecklist, useDepartmentPeople } from "./group-form-dialog";
 
 export function GroupInfoSheet({
@@ -53,7 +52,6 @@ export function GroupInfoSheet({
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState<"leave" | "end" | null>(null);
-  const [peek, setPeek] = useState<PeekMember | null>(null);
 
   const manage = info?.viewer.canManage ?? false;
   const otherDepartments = (departments ?? []).filter(
@@ -157,30 +155,13 @@ export function GroupInfoSheet({
                 </div>
                 {info.members.map((m) => (
                   <div key={m.person._id} className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
-                      onClick={() => setPeek(m.person)}
-                    >
-                      <PersonAvatar person={m.person} className="size-7" />
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-sm",
-                          m.person.status !== "approved" && "text-muted-foreground line-through",
-                        )}
-                      >
-                        {displayName(m.person, locale)}
-                        {m.person._id === info.proposerId || m.person._id === info.approverId ? (
-                          <span className="ml-1.5 text-xs text-muted-foreground">
-                            {m.person._id === info.proposerId && m.person._id === info.approverId
-                              ? t("owner")
-                              : m.person._id === info.proposerId
-                                ? t("proposer")
-                                : t("approver")}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
+                    <PersonAvatar person={m.person} className="size-7" />
+                    <span className={cn("min-w-0 flex-1 truncate text-sm", m.person.status !== "approved" && "text-muted-foreground line-through")}>
+                      {displayName(m.person, locale)}
+                      {m.person._id === info.proposerId ? (
+                        <span className="ml-1.5 text-xs text-muted-foreground">{t("proposer")}</span>
+                      ) : null}
+                    </span>
                     {m.canRemove ? (
                       <Button
                         size="icon-xs"
@@ -194,14 +175,6 @@ export function GroupInfoSheet({
                   </div>
                 ))}
               </section>
-              <MemberPeek
-                member={peek}
-                open={peek !== null}
-                onOpenChange={(next) => {
-                  if (!next) setPeek(null);
-                }}
-                onOpenedDm={() => onOpenChange(false)}
-              />
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
                 {manage ? (

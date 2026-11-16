@@ -8,7 +8,6 @@ import {
   channelAudience,
   channelMemberRow,
   explicitMembers,
-  memberIsMuted,
   myChannels,
   oversees,
   presidiumMemberIds,
@@ -16,11 +15,9 @@ import {
   readBaseline,
   requireChannelAccess,
   retentionDays,
-  TIMED_MUTE_MS,
   touchReadState,
   unseenAnnouncements,
   type ChannelAccess,
-  type TimedMuteKey,
 } from "./lib/channels";
 import { findSasa, isAiChannelType, assistantOwner } from "./lib/ai/sasa";
 import { LIMITS, RETENTION_OPTIONS } from "./lib/constants";
@@ -46,8 +43,6 @@ export type ChannelView = {
   /** Announcements not yet acknowledged; they ignore mute. */
   unseenAnnouncements: number;
   muted: boolean;
-  /** Set while a temporary mute (全体 / department) is still active. */
-  mutedUntil?: number;
   ended: boolean;
   archived: boolean;
   /** AI mode is on: new messages can be read by 小飒. */
@@ -122,8 +117,7 @@ async function toChannelView(
     lastMessageAt: channel.lastMessageAt,
     unread: 0,
     unseenAnnouncements: 0,
-    muted: memberIsMuted(state),
-    mutedUntil: state?.mutedUntil && state.mutedUntil > Date.now() ? state.mutedUntil : undefined,
+    muted: state?.muted === true,
     ended: channel.endedAt !== undefined,
     archived: false,
     aiEnabled: isAiChannelType(channel.type) && channel.aiEnabled === true,
@@ -421,45 +415,20 @@ export const markAnnouncementsSeen = mutation({
   },
 });
 
-const timedMute = v.union(v.literal("30m"), v.literal("1h"), v.literal("1d"));
-
-/**
- * Mute a chat. Groups and DMs can be muted indefinitely.
- * 全体 and department chats only support temporary mute (30m / 1h / 1d).
- */
 export const setMuted = mutation({
-  args: {
-    channelId: v.id("channels"),
-    muted: v.boolean(),
-    duration: v.optional(timedMute),
-  },
+  args: { channelId: v.id("channels"), muted: v.boolean() },
   handler: async (ctx, args) => {
     const viewer = await requireApproved(ctx);
     const { channel, access } = await requireChannelAccess(ctx, viewer, args.channelId);
     if (access.via !== "member") throw appError("FORBIDDEN");
-    const timedOnly = channel.type === "org" || channel.type === "department";
-
-    let muted = false;
-    let mutedUntil: number | undefined;
-    if (args.muted) {
-      if (timedOnly) {
-        if (!args.duration) throw appError("INVALID", "duration");
-        mutedUntil = Date.now() + TIMED_MUTE_MS[args.duration as TimedMuteKey];
-      } else {
-        muted = true;
-        mutedUntil = undefined;
-      }
-    }
-
     const row = await channelMemberRow(ctx, channel._id, viewer.user._id);
-    const patch = { muted, mutedUntil };
-    if (row) await ctx.db.patch("channelMembers", row._id, patch);
+    if (row) await ctx.db.patch("channelMembers", row._id, { muted: args.muted });
     else {
       await ctx.db.insert("channelMembers", {
         channelId: channel._id,
         userId: viewer.user._id,
         lastReadAt: Date.now(),
-        ...patch,
+        muted: args.muted,
       });
     }
   },

@@ -15,7 +15,6 @@ import { api } from "@/lib/api";
 import type { Locale } from "@/lib/locale-store";
 import { displayName, localized } from "@/lib/names";
 import { useChat } from "./chat-context";
-import { MemberPeek, type PeekMember } from "./member-peek";
 
 const SEARCH_FROM = 12;
 
@@ -30,20 +29,19 @@ export function ChatMembersButton() {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[80dvh] flex-col md:inset-y-0 md:right-0 md:left-auto md:h-dvh md:max-h-none md:w-80 md:max-w-80 md:translate-x-0 md:translate-y-0 md:rounded-none md:data-open:slide-in-from-right-10 md:data-open:zoom-in-100">
-          {open ? <MembersList onClose={() => setOpen(false)} /> : null}
+          {open ? <MembersList /> : null}
         </DialogContent>
       </Dialog>
     </>
   );
 }
 
-function MembersList({ onClose }: { onClose: () => void }) {
+function MembersList() {
   const t = useTranslations("chat.members");
   const locale = useLocale() as Locale;
   const { channel } = useChat();
   const members = useQuery(api.channels.members, { channelId: channel._id });
   const [query, setQuery] = useState("");
-  const [peek, setPeek] = useState<PeekMember | null>(null);
   const needle = query.trim().toLowerCase();
   const shown = (members ?? []).filter(
     (m) =>
@@ -70,33 +68,26 @@ function MembersList({ onClose }: { onClose: () => void }) {
                 </li>
               ))
             : shown.map((member) => (
-                <li key={member._id}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
-                    aria-label={t("openProfile")}
-                    onClick={() => setPeek(member)}
-                  >
-                    <PersonAvatar person={member} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{displayName(member, locale)}</p>
-                      {member.role === "lead" && member.departments.length > 0 ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {member.departments.map((d) => localized(d.nameZh, d.nameEn, locale)).join(separator)}
-                        </p>
-                      ) : null}
-                    </div>
-                    {member.role ? (
-                      <Badge variant={member.role === "presidium" ? "default" : "secondary"} className="shrink-0">
-                        {t(member.role)}
-                      </Badge>
+                <li key={member._id} className="flex items-center gap-3 rounded-md px-2 py-2">
+                  <PersonAvatar person={member} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{displayName(member, locale)}</p>
+                    {member.role === "lead" && member.departments.length > 0 ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {member.departments.map((d) => localized(d.nameZh, d.nameEn, locale)).join(separator)}
+                      </p>
                     ) : null}
-                    {member.systemAdmin ? (
-                      <Badge variant="outline" className="shrink-0">
-                        {t("systemAdmin")}
-                      </Badge>
-                    ) : null}
-                  </button>
+                  </div>
+                  {member.role ? (
+                    <Badge variant={member.role === "presidium" ? "default" : "secondary"} className="shrink-0">
+                      {t(member.role)}
+                    </Badge>
+                  ) : null}
+                  {member.systemAdmin ? (
+                    <Badge variant="outline" className="shrink-0">
+                      {t("systemAdmin")}
+                    </Badge>
+                  ) : null}
                 </li>
               ))}
           {members && shown.length === 0 ? (
@@ -104,14 +95,6 @@ function MembersList({ onClose }: { onClose: () => void }) {
           ) : null}
         </ul>
       </ScrollArea>
-      <MemberPeek
-        member={peek}
-        open={peek !== null}
-        onOpenChange={(next) => {
-          if (!next) setPeek(null);
-        }}
-        onOpenedDm={onClose}
-      />
     </>
   );
 }

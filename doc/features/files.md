@@ -118,23 +118,11 @@ Both directions are supported:
 - **Save a chat attachment to Files:** "保存到文件 / Save to Files" on an attachment copies it into a folder the viewer can upload to. The new `files` row reuses the same `storageId`, so it costs nothing extra until the attachment expires. It counts against the space's quota. The attachment cleanup cron must not delete a stored object that a `files` row still uses.
 - Quick chat attachments stay as they are: private to the chat and deleted after 15 days.
 
-## Access and history
-
-Beyond space roles, a file can have **extra grants** (`fileGrants`):
-
-- The **owner** (uploader) always has full access and can revoke grants.
-- **Writers** (space write, grant write, or owner) may grant others write or read; **readers** may grant read only.
-- 主席团 / 部长 / 系统管理员 always have **read** oversight of every file; folder/space browse rules still apply for listing.
-- Each file has Access and History actions (top-right / row menu): who has access, add/revoke grants, and a short work log (`fileEvents`: created, renamed, moved, trashed, granted, linked to a task, …).
-
 ## Task files
 
 Task attachments and submitted files live in the task's file space (see [assignments.md](assignments.md#files)).
 
-- Creating/publishing a task creates its folder `任务 Tasks / <task title>` (`folders.assignmentId`) right away.
-- New files attached from a task form must pick a **space and folder** the member can upload to (not only the task folder).
-- A task may have multiple files. Link an **existing** file the member can write (`files.linkToTask`): assignees get write when a reviewer/owner links it; when an assignee links one, task people get read and the task owner gets write.
-- Access is shown next to each task file; Access / History sheets work from the task view too.
+- They go in an automatic folder `任务 Tasks / <task title>`. That folder is linked to the task (`folders.assignmentId`), so everyone who can view the space can see them.
 - Assignees can upload into their task's folder even if they can't otherwise upload to that space.
 - Managers can tidy or delete these files like any others; the task then shows "文件已删除 / File deleted".
 
@@ -161,8 +149,6 @@ Search file names (case-insensitive substring) across the spaces the viewer can 
 | `files.setQuota` | mutation | 主席团 only |
 | `files.folderTree` | query | Folders of a space, for the move and save pickers |
 | `files.purge` | mutation | Managers: delete a trashed file or folder for good |
-| `files.listAccess`, `files.grant`, `files.revoke`, `files.history` | query / mutation | Per-file grants and work history |
-| `files.linkToTask` | mutation | Attach an existing writable file to a task and grant access |
 | `documents.createInFolder` | mutation | New document in a folder (see [Documents](#documents)) |
 | `internal.files.purgeTrash` | internal mutation | Daily cron: deletes trash older than 30 days |
 

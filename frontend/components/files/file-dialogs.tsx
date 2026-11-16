@@ -27,7 +27,6 @@ import { useErrorToast } from "@/lib/errors";
 import type { Locale } from "@/lib/locale-store";
 import { localized } from "@/lib/names";
 import { cn } from "@/lib/utils";
-import { FileAccessActions } from "./file-access";
 import { FileTypeIcon } from "./file-icon";
 import { FileViewer } from "./file-viewer";
 
@@ -528,17 +527,12 @@ export function PreviewDialog({ file, onClose }: { file: FileView | null; onClos
   const drive = file?.drive ? file : null;
   return (
     <>
-      <FileViewer file={stored} onClose={onClose} headerActions={file ? <FileAccessActions fileId={file._id} /> : null} />
+      <FileViewer file={stored} onClose={onClose} />
       <Dialog open={drive !== null} onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <div className="flex items-start gap-2 pr-8">
-              <div className="min-w-0 flex-1">
-                <DialogTitle className="truncate">{drive?.name}</DialogTitle>
-                <DialogDescription>{drive ? formatBytes(drive.size) : ""}</DialogDescription>
-              </div>
-              {drive ? <FileAccessActions fileId={drive._id} /> : null}
-            </div>
+            <DialogTitle className="truncate pr-6">{drive?.name}</DialogTitle>
+            <DialogDescription>{drive ? formatBytes(drive.size) : ""}</DialogDescription>
           </DialogHeader>
           {drive?.previewUrl ? (
             <div className="overflow-hidden rounded-md bg-secondary/40">
