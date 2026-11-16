@@ -29,6 +29,7 @@ import { DocSummaryPanel, SasaDraftPanel, SasaWriteDialog } from "@/components/a
 import { DictationBar, DictationControl, useDictation } from "@/components/docs/dictation";
 import { DocEditor } from "@/components/docs/doc-editor";
 import { MarkdownView } from "@/components/docs/markdown-view";
+import { FileAccessActions } from "@/components/files/file-access";
 import { PageHeader } from "@/components/layout/app-shell";
 import { useTaskChatName } from "@/components/tasks/task-format";
 import { Badge } from "@/components/ui/badge";
@@ -190,6 +191,7 @@ function DocumentDetail({ doc }: { doc: Doc }) {
             {parent.back}
           </Link>
         </Button>
+        {doc.parent.kind === "file" ? <FileAccessActions fileId={doc.parent.fileId} /> : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="icon-sm" variant="ghost" aria-label={t("more")}>

@@ -15,7 +15,7 @@ import {
   taskDocsEditable,
 } from "./lib/documents";
 import { appError } from "./lib/errors";
-import { cleanName, requireFolder, requireSpace, spaceKey, uniqueName } from "./lib/files";
+import { cleanName, logFileEvent, requireFolder, requireSpace, spaceKey, uniqueName } from "./lib/files";
 import { requireApproved } from "./lib/permissions";
 import { taskAccess } from "./lib/tasks";
 import { toSearchText } from "./lib/text";
@@ -233,6 +233,7 @@ export const createInFolder = mutation({
       uploadedBy: viewer.user._id,
     });
     await ctx.db.patch("documents", documentId, { fileId });
+    await logFileEvent(ctx, { fileId, actorId: viewer.user._id, action: "created" });
     await prosemirrorSync.create(ctx, documentId, EMPTY_DOC);
     return documentId;
   },
