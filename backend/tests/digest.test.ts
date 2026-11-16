@@ -165,7 +165,7 @@ describe("daily digest", () => {
     await bob.as.mutation(api.channels.markRead, { channelId: events });
     expect((await t.run((ctx) => buildDigest(ctx, bob.userId, TEN_AM, "en"))).chats).toEqual([]);
     await alice.as.mutation(api.messages.send, { channelId: events, body: "third" });
-    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true });
+    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true, duration: "1h" });
     expect((await t.run((ctx) => buildDigest(ctx, bob.userId, TEN_AM, "en"))).chats).toEqual([
       expect.objectContaining({ name: "Events", unread: 1, muted: true, messages: [] }),
     ]);
