@@ -1,15 +1,16 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, SearchIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { ChannelList, OversightList } from "@/components/chat/channel-list";
 import { ChatRoom } from "@/components/chat/chat-room";
 import { PageHeader } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api, type Id } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +30,11 @@ function Chat() {
   const focus = params.get("m") as Id<"messages"> | null;
   const app = params.get("app") as Id<"chatApps"> | null;
   const lists = useQuery(api.channels.listMine);
+  const [listQuery, setListQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  // Wide screens fall back to the org channel; below `lg` the list shows until one is picked.
+  // From `md` up (same as the app sidebar), list + conversation sit side by side.
+  // Below `md`, the list fills the screen until a chat is opened.
   const activeId = requestedId ?? (oversee ? null : (lists?.org[0]?._id ?? null));
   const detail = useQuery(api.channels.get, activeId ? { channelId: activeId } : "skip");
   const showConversationOnMobile = requestedId !== null;
@@ -40,7 +44,7 @@ function Chat() {
     <div className="flex min-h-0 flex-1">
       <div
         className={cn(
-          "min-h-0 w-full flex-col border-r border-border lg:flex lg:w-72",
+          "min-h-0 w-full min-w-0 flex-col overflow-hidden border-r border-border md:flex md:w-72 md:shrink-0",
           showConversationOnMobile ? "hidden" : "flex",
         )}
       >
@@ -48,13 +52,51 @@ function Chat() {
           <OversightList userId={oversee} activeId={activeId} />
         ) : (
           <>
-            <PageHeader title={t("title")} />
-            {lists ? <ChannelList lists={lists} activeId={activeId} /> : null}
+            <PageHeader
+              title={
+                searchOpen ? (
+                  <Input
+                    autoFocus
+                    value={listQuery}
+                    onChange={(e) => setListQuery(e.target.value)}
+                    placeholder={t("searchList")}
+                    aria-label={t("searchList")}
+                    className="h-8"
+                  />
+                ) : (
+                  t("title")
+                )
+              }
+            >
+              {searchOpen ? (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("close")}
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setListQuery("");
+                  }}
+                >
+                  <XIcon />
+                </Button>
+              ) : (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("searchList")}
+                  onClick={() => setSearchOpen(true)}
+                >
+                  <SearchIcon />
+                </Button>
+              )}
+            </PageHeader>
+            {lists ? <ChannelList lists={lists} activeId={activeId} filter={listQuery} /> : null}
           </>
         )}
       </div>
       <section
-        className={cn("min-h-0 min-w-0 flex-1 flex-col lg:flex", showConversationOnMobile ? "flex" : "hidden")}
+        className={cn("min-h-0 min-w-0 flex-1 flex-col md:flex", showConversationOnMobile ? "flex" : "hidden")}
       >
         {detail ? (
           <ChatRoom

@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { channelMemberRow, myChannels, readBaseline, unseenAnnouncements } from "./channels";
+import { channelMemberRow, memberIsMuted, myChannels, readBaseline, unseenAnnouncements } from "./channels";
 import { LIMITS } from "./constants";
 import { isLiveUserContent, previewText } from "./messages";
 import { buildViewerContext } from "./permissions";
@@ -132,7 +132,7 @@ async function buildUnread(ctx: QueryCtx, user: Doc<"users">, locale: DigestLoca
         .take(LIMITS.unreadCountCap + 20)
     ).filter((m) => m.authorId !== user._id && isLiveUserContent(m) && m.announcement !== true);
     if (unread.length === 0) continue;
-    const muted = row?.muted === true;
+    const muted = memberIsMuted(row);
     const shown = muted ? [] : unread.slice(0, LIMITS.digestChatMessages).reverse();
     chats.push({
       chat: {

@@ -17,7 +17,6 @@ import {
   UploadIcon,
   XIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import {
   useEffect,
@@ -37,6 +36,7 @@ import { chatHasDocs, NewChatDocumentDialog } from "@/components/docs/chat-docum
 import { FilePickerDialog } from "@/components/files/file-dialogs";
 import { PersonAvatar } from "@/components/people/person-avatar";
 import { matchesPerson } from "@/components/people/use-people";
+import { AssignmentFormDialog } from "@/components/tasks/assignment-form-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -143,6 +143,7 @@ function Editor({ name }: { name: string }) {
   const [sasaDocs, setSasaDocs] = useState<PickedDoc[]>([]);
   const [pickingFiles, setPickingFiles] = useState(false);
   const [newDoc, setNewDoc] = useState(false);
+  const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [announce, setAnnounce] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -384,7 +385,12 @@ function Editor({ name }: { name: string }) {
   };
 
   return (
-    <div className={cn("relative shrink-0 border-t p-3", announcing ? "border-warning/60 bg-warning/5" : "border-border")}>
+    <div
+      className={cn(
+        "@container/composer relative shrink-0 border-t p-3",
+        announcing ? "border-warning/60 bg-warning/5" : "border-border",
+      )}
+    >
       {mentionQuery !== null && candidates.length > 0 ? (
         <div className="absolute bottom-full left-3 z-20 mb-1 w-72 overflow-hidden rounded-md border border-border bg-popover p-1 shadow-md">
           {candidates.map((c, i) => (
@@ -493,9 +499,10 @@ function Editor({ name }: { name: string }) {
         </div>
       ) : null}
 
-      <div className="flex items-end gap-2">
+      {/* Narrow panels: tools above so textarea + send stay on one line. Wide: tools inline. */}
+      <div className="flex flex-col gap-2 @[28rem]/composer:flex-row @[28rem]/composer:items-end">
         {!editing && !assistant ? (
-          <>
+          <div className="flex shrink-0 items-center gap-1">
             <input ref={fileRef} type="file" multiple hidden onChange={onFileInput} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -535,16 +542,26 @@ function Editor({ name }: { name: string }) {
               }
             />
             {canCreateTask ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button asChild size="icon-lg" variant="ghost" aria-label={t("newTask")}>
-                    <Link href={`/assignments/new/?c=${channel._id}`}>
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon-lg"
+                      variant="ghost"
+                      aria-label={t("newTask")}
+                      onClick={() => setTaskFormOpen(true)}
+                    >
                       <ClipboardListIcon />
-                    </Link>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t("newTask")}</TooltipContent>
-              </Tooltip>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t("newTask")}</TooltipContent>
+                </Tooltip>
+                <AssignmentFormDialog
+                  open={taskFormOpen}
+                  onOpenChange={setTaskFormOpen}
+                  channelId={channel._id}
+                />
+              </>
             ) : null}
             {channel.access.canAnnounce ? (
               <Tooltip>
@@ -563,27 +580,35 @@ function Editor({ name }: { name: string }) {
                 <TooltipContent>{t("announce")}</TooltipContent>
               </Tooltip>
             ) : null}
-          </>
+          </div>
         ) : null}
-        <Textarea
-          ref={textareaRef}
-          value={body}
-          onChange={(e) => {
-            setBody(e.target.value);
-            updateMentionQuery(e.target.value, e.target.selectionStart);
-          }}
-          onKeyDown={onKeyDown}
-          onKeyUp={enter.onKeyUp}
-          onPaste={onPaste}
-          onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          rows={1}
-          className="max-h-40 min-h-9 resize-none"
-        />
-        <Button size="icon-lg" onClick={() => void submit()} disabled={!canSend} aria-label={editing ? t("saveEdit") : t("send")}>
-          <SendIcon />
-        </Button>
+        <div className="flex min-w-0 flex-1 items-end gap-2">
+          <Textarea
+            ref={textareaRef}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value);
+              updateMentionQuery(e.target.value, e.target.selectionStart);
+            }}
+            onKeyDown={onKeyDown}
+            onKeyUp={enter.onKeyUp}
+            onPaste={onPaste}
+            onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            rows={1}
+            className="max-h-40 min-h-9 min-w-0 flex-1 resize-none"
+          />
+          <Button
+            size="icon-lg"
+            className="shrink-0"
+            onClick={() => void submit()}
+            disabled={!canSend}
+            aria-label={editing ? t("saveEdit") : t("send")}
+          >
+            <SendIcon />
+          </Button>
+        </div>
       </div>
       {tooLong ? (
         <p className="mt-1 text-xs text-destructive">{t("tooLong", { max: LIMITS.messageBody })}</p>
