@@ -157,6 +157,8 @@ export default defineSchema({
     departmentId: v.optional(v.id("departments")),
     dmKey: v.optional(v.string()),
     createdBy: v.optional(v.id("users")),
+    /** Group chats approved from a proposal: the reviewer, co-owner with createdBy. */
+    approvedBy: v.optional(v.id("users")),
     lastMessageAt: v.optional(v.number()),
     /** Messages older than this are purged. Unset means LIMITS.defaultRetentionDays. */
     retentionDays: v.optional(v.number()),
@@ -216,6 +218,8 @@ export default defineSchema({
     /** Announcements stay highlighted until acknowledged, independently of lastReadAt. */
     announcementsReadAt: v.optional(v.number()),
     muted: v.optional(v.boolean()),
+    /** Temporary mute for 全体 / department chats; ignored once past this timestamp. */
+    mutedUntil: v.optional(v.number()),
     /** Set for explicit DM and group members; read-state-only rows leave it unset. */
     joinedAt: v.optional(v.number()),
     addedBy: v.optional(v.id("users")),
@@ -358,6 +362,31 @@ export default defineSchema({
     .index("by_space_folder", ["departmentId", "folderId"])
     .index("by_storage", ["storageId"])
     .index("by_deletedAt", ["deletedAt"]),
+
+  /**
+   * Extra per-user access on a file, beyond space membership.
+   * Used when a task links a file so assignees can open (and sometimes edit) it.
+   */
+  fileGrants: defineTable({
+    fileId: v.id("files"),
+    userId: v.id("users"),
+    level: v.union(v.literal("read"), v.literal("write")),
+    grantedBy: v.id("users"),
+    /** Set when the grant came from attaching the file to a task. */
+    assignmentId: v.optional(v.id("assignments")),
+  })
+    .index("by_file", ["fileId"])
+    .index("by_file_user", ["fileId", "userId"])
+    .index("by_user", ["userId"])
+    .index("by_assignment", ["assignmentId"]),
+
+  /** Short work history for a file (create, rename, move, trash, grant, task link, …). */
+  fileEvents: defineTable({
+    fileId: v.id("files"),
+    actorId: v.id("users"),
+    action: v.string(),
+    metadata: v.optional(v.any()),
+  }).index("by_file", ["fileId"]),
 
   /** A Google Drive upload between `drive.startUpload` and `drive.finishUpload`. */
   driveUploads: defineTable({
