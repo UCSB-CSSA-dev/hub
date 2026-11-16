@@ -38,6 +38,7 @@ type NavItem = {
   key:
     | "chat"
     | "notifications"
+    | "contacts"
     | "roster"
     | "files"
     | "assignments"
@@ -57,18 +58,18 @@ type NavItem = {
 
 const CHAT: NavItem = { key: "chat", href: "/chat/", icon: MessageSquareIcon };
 const NOTIFICATIONS: NavItem = { key: "notifications", href: "/notifications/", icon: BellIcon };
-const ROSTER: NavItem = { key: "roster", href: "/roster/", icon: UsersIcon };
+const CONTACTS: NavItem = { key: "contacts", href: "/roster/", icon: UsersIcon, section: ["/roster/"] };
 const FILES: NavItem = { key: "files", href: "/files/", icon: FolderIcon };
 const ASSIGNMENTS: NavItem = { key: "assignments", href: "/assignments/", icon: ClipboardListIcon };
-const MAIN_NAV: NavItem[] = [CHAT, FILES, ASSIGNMENTS];
+const MAIN_NAV: NavItem[] = [CHAT, FILES, ASSIGNMENTS, CONTACTS];
 
 const ADMIN_OVERVIEW: NavItem = { key: "adminOverview", href: "/admin/", icon: LayoutDashboardIcon, exact: true };
 const AUDIT_LOG: NavItem = { key: "auditLog", href: "/admin/audit/", icon: ScrollTextIcon };
 const SASA_ADMIN: NavItem = { key: "sasa", href: "/admin/ai/", icon: SparklesIcon };
 const SETTINGS: NavItem = { key: "settings", href: "/settings/", icon: SettingsIcon };
 
-// On phones several pages share one bottom tab, with a bar at the top to switch between them.
-const MOBILE_ADMIN: NavItem = { key: "admin", href: "/roster/", icon: ShieldIcon, section: ["/roster/", "/admin/"] };
+// On phones several admin pages share one bottom tab, with a bar at the top to switch between them.
+const MOBILE_ADMIN: NavItem = { key: "admin", href: "/admin/", icon: ShieldIcon, section: ["/admin/"] };
 
 function useNav() {
   const viewer = useViewer();
@@ -79,19 +80,19 @@ function useNav() {
   const counts: Partial<Record<NavItem["key"], number>> = {
     notifications: unread,
     assignments: todo,
-    roster: viewer.reviewCount,
-    admin: viewer.reviewCount + appeals,
+    contacts: viewer.reviewCount,
+    admin: appeals,
     sasa: appeals,
   };
-  // The roster is open to everyone; it sits with the admin pages because that's where people are managed.
+  // Contacts (roster) is a top-level tab; admin keeps overview / audit / Sasa.
   const admin = [
-    ROSTER,
     ...(isManager ? [ADMIN_OVERVIEW] : []),
     ...(viewer.isAdmin ? [AUDIT_LOG] : []),
     ...(viewer.isSystemAdmin ? [SASA_ADMIN] : []),
   ];
-  const mobile = [CHAT, FILES, ASSIGNMENTS, NOTIFICATIONS, MOBILE_ADMIN, SETTINGS];
-  const mobileSections = [{ tab: MOBILE_ADMIN, items: admin }];
+  const mobileAdmin = admin.length > 0 ? [MOBILE_ADMIN] : [];
+  const mobile = [CHAT, FILES, ASSIGNMENTS, CONTACTS, NOTIFICATIONS, ...mobileAdmin, SETTINGS];
+  const mobileSections = admin.length > 1 ? [{ tab: MOBILE_ADMIN, items: admin }] : [];
   return { main: MAIN_NAV, admin, mobile, mobileSections, counts };
 }
 

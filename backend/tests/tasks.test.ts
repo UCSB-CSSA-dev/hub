@@ -194,6 +194,30 @@ describe("tasks", () => {
     expect(mine!.mySubmission!.files.map((f) => f.name)).toEqual(["poster.txt"]);
   });
 
+  test("creating a task creates its folder; linking a file grants assignees write", async () => {
+    const t = setup();
+    const { lead, alice, bob, events } = await team(t);
+    const assignmentId = await lead.as.mutation(api.assignments.create, taskArgs(events, [alice.userId, bob.userId]));
+    const view = await lead.as.query(api.assignments.get, { assignmentId });
+    expect(view?.folderId).toBeTruthy();
+
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["brief"], { type: "text/plain" })));
+    const saved = await lead.as.mutation(api.files.save, { space: "events", storageId, name: "brief.txt" });
+    if (!saved.ok) throw new Error(saved.code);
+    await lead.as.mutation(api.files.linkToTask, { fileId: saved.fileId, assignmentId });
+
+    const access = await alice.as.query(api.files.listAccess, { fileId: saved.fileId });
+    expect(access?.grants.map((g) => ({ userId: g.userId, level: g.level }))).toEqual(
+      expect.arrayContaining([
+        { userId: alice.userId, level: "write" },
+        { userId: bob.userId, level: "write" },
+      ]),
+    );
+    const task = await alice.as.query(api.assignments.get, { assignmentId });
+    expect(task?.files.map((f) => f.name)).toEqual(["brief.txt"]);
+    await alice.as.mutation(api.files.rename, { fileId: saved.fileId, name: "brief-final.txt" });
+  });
+
   test("checklist tasks can auto-approve when marked done", async () => {
     const t = setup();
     const { lead, alice, events } = await team(t);

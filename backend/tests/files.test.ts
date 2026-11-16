@@ -155,4 +155,37 @@ describe("file spaces", () => {
     const page = await alice.as.query(api.messages.list, { channelId, paginationOpts: { numItems: 10, cursor: null } });
     expect(page.page[0].files.map((f) => f.name)).toEqual(["plan.txt"]);
   });
+
+  test("owner grants and revokes access; writers grant write; history records changes", async () => {
+    const t = setup();
+    const { alice, bob, carol } = await team(t);
+    const fileId = await upload(t, alice.as, "events", "secret.txt");
+
+    await alice.as.mutation(api.files.grant, { fileId, userId: bob.userId, level: "write" });
+    await bob.as.mutation(api.files.rename, { fileId, name: "shared.txt" });
+    await bob.as.mutation(api.files.grant, { fileId, userId: carol.userId, level: "read" });
+    await expect(carol.as.mutation(api.files.grant, { fileId, userId: bob.userId, level: "write" })).rejects.toThrow(
+      /FORBIDDEN/,
+    );
+    await expect(bob.as.mutation(api.files.revoke, { fileId, userId: carol.userId })).rejects.toThrow(/FORBIDDEN/);
+    await alice.as.mutation(api.files.revoke, { fileId, userId: carol.userId });
+
+    const access = await alice.as.query(api.files.listAccess, { fileId });
+    expect(access?.grants.map((g) => g.userId)).toEqual([bob.userId]);
+    expect(access?.canEdit).toBe(true);
+
+    const history = await alice.as.query(api.files.history, { fileId });
+    expect(history?.map((e) => e.action)).toEqual(
+      expect.arrayContaining(["created", "granted", "renamed", "revoked"]),
+    );
+  });
+
+  test("部长 can open files outside their department via oversight read", async () => {
+    const t = setup();
+    const { lead, carol } = await team(t);
+    const fileId = await upload(t, carol.as, "publicity", "flyer.txt");
+    const asLead = await lead.as.query(api.files.get, { fileId });
+    expect(asLead?.file.name).toBe("flyer.txt");
+    expect(asLead?.file.myAccess).toBe("read");
+  });
 });
