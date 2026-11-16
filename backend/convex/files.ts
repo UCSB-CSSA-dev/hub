@@ -12,12 +12,16 @@ import {
   cleanName,
   descendantFolders,
   ensureTaskFolder,
+  filePermission,
   filesIn,
-  inTaskFolder,
+  getFileGrant,
   isBlockedFile,
   listChildren,
   loadSpace,
+  logFileEvent,
   purgeFile,
+  requireFileView,
+  requireFileWrite,
   requireFolder,
   requireSpace,
   spaceAccess,
@@ -25,6 +29,8 @@ import {
   spaceUsage,
   trashFolderTree,
   uniqueName,
+  upsertFileGrant,
+  type FilePermission,
   type Space,
   type SpaceAccess,
 } from "./lib/files";
@@ -67,6 +73,8 @@ export type FileView = {
   uploadedBy: UserSummary | null;
   folderId: Id<"folders"> | null;
   canEdit: boolean;
+  /** Explicit grant or owner/space write; used by the access sheet. */
+  myAccess: "owner" | "write" | "read" | "none";
 };
 
 export type FolderView = {
@@ -93,21 +101,19 @@ async function spaceView(ctx: QueryCtx, viewer: ViewerContext, space: Space): Pr
   };
 }
 
-/** Uploaders edit their own files where they can upload (or in task folders); managers edit everything. */
-function canEditFile(viewer: ViewerContext, access: SpaceAccess, file: Doc<"files">, taskFolder: boolean) {
-  return access.manage || (file.uploadedBy === viewer.user._id && (access.upload || taskFolder));
+function myAccessLabel(viewer: ViewerContext, file: Doc<"files">, permission: FilePermission): FileView["myAccess"] {
+  if (file.uploadedBy === viewer.user._id) return "owner";
+  if (permission.write) return "write";
+  if (permission.view) return "read";
+  return "none";
 }
 
-async function fileViews(
-  ctx: QueryCtx,
-  viewer: ViewerContext,
-  access: SpaceAccess,
-  files: Doc<"files">[],
-  taskFolder: (file: Doc<"files">) => Promise<boolean>,
-): Promise<FileView[]> {
+async function fileViews(ctx: QueryCtx, viewer: ViewerContext, files: Doc<"files">[]): Promise<FileView[]> {
   const people = await getUserSummaries(ctx, files.map((f) => f.uploadedBy));
   const views: FileView[] = [];
   for (const file of files) {
+    const permission = await filePermission(ctx, viewer, file);
+    if (!permission.view) continue;
     const isImage = IMAGE_TYPES.has(file.contentType);
     const drive = file.driveFileId;
     const url = drive
@@ -136,20 +142,15 @@ async function fileViews(
           : null,
       uploadedBy: people.get(file.uploadedBy) ?? null,
       folderId: file.folderId ?? null,
-      canEdit: canEditFile(viewer, access, file, await taskFolder(file)),
+      canEdit: permission.write,
+      myAccess: myAccessLabel(viewer, file, permission),
     });
   }
   return views;
 }
 
 export async function toFileViews(ctx: QueryCtx, viewer: ViewerContext, files: Doc<"files">[]) {
-  const views: FileView[] = [];
-  for (const file of files) {
-    const { department } = await loadSpace(ctx, file.departmentId);
-    const access = spaceAccess(viewer, department);
-    views.push(...(await fileViews(ctx, viewer, access, [file], (f) => inTaskFolder(ctx, f.folderId))));
-  }
-  return views;
+  return fileViews(ctx, viewer, files);
 }
 
 function folderView(folder: Doc<"folders">): FolderView {
@@ -190,21 +191,20 @@ export const listFolder = query({
     const viewer = await requireApproved(ctx);
     const space = await requireSpaceOrNull(ctx, viewer, args.space);
     if (!space) return null;
-    const { space: s, access } = space;
+    const { space: s } = space;
     let folder: Doc<"folders"> | null = null;
     if (args.folderId) {
       folder = await ctx.db.get("folders", args.folderId);
       if (!folder || folder.deletedAt || folder.departmentId !== s.departmentId) return null;
     }
     const trail = await breadcrumb(ctx, folder?._id);
-    const taskFolder = trail.some((f) => f.assignmentId !== undefined);
     const { folders, files } = await listChildren(ctx, s.departmentId, folder?._id);
     return {
       space: await spaceView(ctx, viewer, s),
       folder: folder ? folderView(folder) : null,
       breadcrumb: trail.map(folderView),
       folders: folders.sort(byName).map(folderView),
-      files: await fileViews(ctx, viewer, access, files.sort(byName), async () => taskFolder),
+      files: await fileViews(ctx, viewer, files.sort(byName)),
     };
   },
 });
@@ -224,12 +224,11 @@ export const get = query({
     const viewer = await requireApproved(ctx);
     const file = await ctx.db.get("files", args.fileId);
     if (!file || file.deletedAt) return null;
+    const permission = await filePermission(ctx, viewer, file);
+    if (!permission.view) return null;
     const space = await loadSpace(ctx, file.departmentId);
-    const access = spaceAccess(viewer, space.department);
-    if (!access.view) return null;
     const trail = await breadcrumb(ctx, file.folderId);
-    const taskFolder = trail.some((f) => f.assignmentId !== undefined);
-    const [view] = await fileViews(ctx, viewer, access, [file], async () => taskFolder);
+    const [view] = await fileViews(ctx, viewer, [file]);
     return { file: view, space: await spaceView(ctx, viewer, space), breadcrumb: trail.map(folderView) };
   },
 });
@@ -249,10 +248,11 @@ export const search = query({
     const spaces = new Map<string, SpaceView>();
     for (const file of live) {
       if (!file.name.toLowerCase().includes(needle)) continue;
+      const permission = await filePermission(ctx, viewer, file);
+      if (!permission.view) continue;
       const key = file.departmentId ?? PUBLIC_SPACE;
       if (!spaces.has(key)) spaces.set(key, await spaceView(ctx, viewer, await loadSpace(ctx, file.departmentId)));
       const space = spaces.get(key)!;
-      if (!space.access.view) continue;
       results.push({ file, space });
       if (results.length >= LIMITS.fileSearchResults) break;
     }
@@ -494,6 +494,12 @@ export const save = mutation({
         folderId,
         uploadedBy: viewer.user._id,
       });
+      await logFileEvent(ctx, {
+        fileId,
+        actorId: viewer.user._id,
+        action: "created",
+        metadata: { name, assignmentId: target.assignment?._id },
+      });
       return { ok: true, fileId };
     } catch (error) {
       // Throwing would roll back the deletes, so rejected uploads are reported as a result instead.
@@ -509,13 +515,9 @@ export const save = mutation({
 export type SaveResult = { ok: true; fileId: Id<"files"> } | { ok: false; code: ErrorCode; message: string };
 
 async function requireEditableFile(ctx: QueryCtx, viewer: ViewerContext, fileId: Id<"files">) {
-  const file = await ctx.db.get("files", fileId);
-  if (!file) throw appError("NOT_FOUND");
+  const { file, permission } = await requireFileWrite(ctx, viewer, fileId);
   const space = await loadSpace(ctx, file.departmentId);
-  const access = spaceAccess(viewer, space.department);
-  if (!access.view) throw appError("NOT_FOUND");
-  if (!canEditFile(viewer, access, file, await inTaskFolder(ctx, file.folderId))) throw appError("FORBIDDEN");
-  return { file, access };
+  return { file, permission, access: spaceAccess(viewer, space.department) };
 }
 
 export const rename = mutation({
@@ -524,6 +526,7 @@ export const rename = mutation({
     const viewer = await requireApproved(ctx);
     const { file } = await requireEditableFile(ctx, viewer, args.fileId);
     if (file.deletedAt) throw appError("NOT_FOUND");
+    const previous = file.name;
     const name = await uniqueName(ctx, {
       departmentId: file.departmentId,
       parentId: file.folderId,
@@ -533,6 +536,7 @@ export const rename = mutation({
     });
     await ctx.db.patch("files", file._id, { name });
     if (file.documentId) await ctx.db.patch("documents", file.documentId, { title: name });
+    await logFileEvent(ctx, { fileId: file._id, actorId: viewer.user._id, action: "renamed", metadata: { from: previous, to: name } });
   },
 });
 
@@ -542,9 +546,10 @@ export const move = mutation({
     const viewer = await requireApproved(ctx);
     const { file, access } = await requireEditableFile(ctx, viewer, args.fileId);
     if (file.deletedAt) throw appError("NOT_FOUND");
-    // Uploaders who can't otherwise upload here (task folders) can't move files out of them.
+    // Uploaders who can't otherwise upload here (task folders / grant-only write) can't move files out.
     if (!access.upload && !access.manage) throw appError("FORBIDDEN");
     if (args.folderId) await requireFolder(ctx, file.departmentId, args.folderId);
+    const from = file.folderId;
     const name = await uniqueName(ctx, {
       departmentId: file.departmentId,
       parentId: args.folderId,
@@ -553,6 +558,12 @@ export const move = mutation({
       excludeId: file._id,
     });
     await ctx.db.patch("files", file._id, { folderId: args.folderId, name });
+    await logFileEvent(ctx, {
+      fileId: file._id,
+      actorId: viewer.user._id,
+      action: "moved",
+      metadata: { from, to: args.folderId },
+    });
   },
 });
 
@@ -560,6 +571,7 @@ export const move = mutation({
 export async function trashFile(ctx: MutationCtx, viewer: ViewerContext, file: Doc<"files">) {
   if (file.deletedAt) return;
   await ctx.db.patch("files", file._id, { deletedAt: Date.now(), deletedBy: viewer.user._id });
+  await logFileEvent(ctx, { fileId: file._id, actorId: viewer.user._id, action: "trashed", metadata: { name: file.name } });
   if (file.uploadedBy !== viewer.user._id) {
     await logAudit(ctx, {
       actorId: viewer.user._id,
@@ -592,6 +604,7 @@ export const restore = mutation({
     const folderId = folder && !folder.deletedAt ? folder._id : undefined;
     const name = await uniqueName(ctx, { departmentId: file.departmentId, parentId: folderId, name: file.name, kind: "file" });
     await ctx.db.patch("files", file._id, { deletedAt: undefined, deletedBy: undefined, folderId, name });
+    await logFileEvent(ctx, { fileId: file._id, actorId: viewer.user._id, action: "restored", metadata: { name } });
   },
 });
 
@@ -636,7 +649,7 @@ export const saveAttachment = mutation({
     if (args.folderId) await requireFolder(ctx, space.departmentId, args.folderId);
     if (isBlockedFile(attachment.name, attachment.contentType)) throw appError("FILE_TYPE_BLOCKED");
     await chargeQuota(ctx, space.departmentId, attachment.size);
-    return await ctx.db.insert("files", {
+    const fileId = await ctx.db.insert("files", {
       storageId: attachment.storageId,
       thumbStorageId: attachment.thumbStorageId,
       name: await uniqueName(ctx, {
@@ -651,6 +664,8 @@ export const saveAttachment = mutation({
       folderId: args.folderId,
       uploadedBy: viewer.user._id,
     });
+    await logFileEvent(ctx, { fileId, actorId: viewer.user._id, action: "created", metadata: { from: "attachment" } });
+    return fileId;
   },
 });
 
@@ -694,6 +709,194 @@ export const setQuota = mutation({
       targetId: space.departmentId ?? PUBLIC_SPACE,
       metadata: { from: previous, to: quotaBytes },
     });
+  },
+});
+
+const grantLevel = v.union(v.literal("read"), v.literal("write"));
+
+/** Who has access: owner, explicit grants, and implied space / oversight roles. */
+export const listAccess = query({
+  args: { fileId: v.id("files") },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const file = await ctx.db.get("files", args.fileId);
+    if (!file || file.deletedAt) return null;
+    const permission = await filePermission(ctx, viewer, file);
+    if (!permission.view) return null;
+    const grants = await ctx.db
+      .query("fileGrants")
+      .withIndex("by_file", (q) => q.eq("fileId", file._id))
+      .collect();
+    const people = await getUserSummaries(ctx, [
+      file.uploadedBy,
+      ...grants.map((g) => g.userId),
+      ...grants.map((g) => g.grantedBy),
+    ]);
+    const space = await loadSpace(ctx, file.departmentId);
+    const access = spaceAccess(viewer, space.department);
+    return {
+      owner: people.get(file.uploadedBy) ?? null,
+      canEdit: permission.manageAccess && file.uploadedBy === viewer.user._id,
+      canGrant: permission.canGrant,
+      myAccess: myAccessLabel(viewer, file, permission),
+      space: {
+        key: spaceKey(space.department),
+        nameZh: space.department?.nameZh ?? "公共",
+        nameEn: space.department?.nameEn ?? "Public",
+        view: access.view,
+        upload: access.upload,
+        manage: access.manage,
+      },
+      implied: {
+        spaceMembers: space.department ? space.department.kind !== "presidium" : true,
+        oversight: true,
+      },
+      grants: grants.map((g) => ({
+        _id: g._id,
+        userId: g.userId,
+        user: people.get(g.userId) ?? null,
+        level: g.level,
+        grantedBy: people.get(g.grantedBy) ?? null,
+        assignmentId: g.assignmentId ?? null,
+        removable: file.uploadedBy === viewer.user._id,
+      })),
+    };
+  },
+});
+
+export const grant = mutation({
+  args: { fileId: v.id("files"), userId: v.id("users"), level: grantLevel },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const { file, permission } = await requireFileView(ctx, viewer, args.fileId);
+    if (!permission.canGrant) throw appError("FORBIDDEN");
+    if (permission.canGrant === "read" && args.level === "write") throw appError("FORBIDDEN");
+    if (args.userId === file.uploadedBy) throw appError("INVALID", "userId");
+    const user = await ctx.db.get("users", args.userId);
+    if (!user || user.status !== "approved") throw appError("NOT_FOUND");
+    const changed = await upsertFileGrant(ctx, {
+      fileId: file._id,
+      userId: args.userId,
+      level: args.level,
+      grantedBy: viewer.user._id,
+    });
+    if (changed) {
+      await logFileEvent(ctx, {
+        fileId: file._id,
+        actorId: viewer.user._id,
+        action: "granted",
+        metadata: { userId: args.userId, level: args.level },
+      });
+    }
+  },
+});
+
+export const revoke = mutation({
+  args: { fileId: v.id("files"), userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const { file, permission } = await requireFileView(ctx, viewer, args.fileId);
+    if (!permission.manageAccess || file.uploadedBy !== viewer.user._id) throw appError("FORBIDDEN");
+    if (args.userId === file.uploadedBy) throw appError("INVALID", "userId");
+    const existing = await getFileGrant(ctx, file._id, args.userId);
+    if (!existing) return;
+    await ctx.db.delete("fileGrants", existing._id);
+    await logFileEvent(ctx, {
+      fileId: file._id,
+      actorId: viewer.user._id,
+      action: "revoked",
+      metadata: { userId: args.userId, level: existing.level },
+    });
+  },
+});
+
+/** Recent work history for a file the viewer can open. */
+export const history = query({
+  args: { fileId: v.id("files") },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const file = await ctx.db.get("files", args.fileId);
+    if (!file || file.deletedAt) return null;
+    const permission = await filePermission(ctx, viewer, file);
+    if (!permission.view) return null;
+    const events = (
+      await ctx.db
+        .query("fileEvents")
+        .withIndex("by_file", (q) => q.eq("fileId", file._id))
+        .order("desc")
+        .take(40)
+    );
+    const people = await getUserSummaries(ctx, events.map((e) => e.actorId));
+    return events.map((e) => ({
+      _id: e._id,
+      _creationTime: e._creationTime,
+      action: e.action,
+      actor: people.get(e.actorId) ?? null,
+      metadata: e.metadata ?? null,
+    }));
+  },
+});
+
+/**
+ * Attach an existing file the viewer can write to a task.
+ * Owner/reviewer linking grants write to assignees; assignees grant read to task people and write to the creator.
+ */
+export const linkToTask = mutation({
+  args: { fileId: v.id("files"), assignmentId: v.id("assignments") },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const { file } = await requireFileWrite(ctx, viewer, args.fileId);
+    const assignment = await ctx.db.get("assignments", args.assignmentId);
+    if (!assignment) throw appError("NOT_FOUND");
+    const access = await taskAccess(ctx, viewer, assignment);
+    if (!access || (!access.review && !access.submission)) throw appError("FORBIDDEN");
+    if (assignment.status === "closed") throw appError("INVALID", "closed");
+
+    if (!assignment.fileIds.includes(file._id)) {
+      if (assignment.fileIds.length + 1 > LIMITS.taskFiles) throw appError("INVALID", "fileIds");
+      await ctx.db.patch("assignments", assignment._id, { fileIds: [...assignment.fileIds, file._id] });
+    }
+
+    await ensureTaskFolder(ctx, assignment, viewer.user._id);
+
+    const rows = await ctx.db
+      .query("assignmentSubmissions")
+      .withIndex("by_assignment", (q) => q.eq("assignmentId", assignment._id))
+      .collect();
+    const assignees = rows.map((r) => r.assigneeId);
+    const taskPeople = new Set<Id<"users">>([assignment.createdBy, ...assignees, ...(assignment.draftAssigneeIds ?? [])]);
+
+    if (access.review || file.uploadedBy === viewer.user._id) {
+      for (const userId of assignees.length > 0 ? assignees : (assignment.draftAssigneeIds ?? [])) {
+        await upsertFileGrant(ctx, {
+          fileId: file._id,
+          userId,
+          level: "write",
+          grantedBy: viewer.user._id,
+          assignmentId: assignment._id,
+        });
+      }
+    } else {
+      for (const userId of taskPeople) {
+        if (userId === viewer.user._id) continue;
+        const level = userId === assignment.createdBy ? "write" : "read";
+        await upsertFileGrant(ctx, {
+          fileId: file._id,
+          userId,
+          level,
+          grantedBy: viewer.user._id,
+          assignmentId: assignment._id,
+        });
+      }
+    }
+
+    await logFileEvent(ctx, {
+      fileId: file._id,
+      actorId: viewer.user._id,
+      action: "linked_task",
+      metadata: { assignmentId: assignment._id },
+    });
+    return file._id;
   },
 });
 
