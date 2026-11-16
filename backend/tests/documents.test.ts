@@ -164,6 +164,40 @@ describe("documents in Files", () => {
     await lead.as.mutation(api.files.purge, { fileId: file._id });
     expect(await t.run((ctx) => ctx.db.get("documents", documentId))).toBeNull();
   });
+
+  test("collaborative edits share one history row with preview and revert", async () => {
+    const t = setup();
+    const { lead, alice } = await team(t);
+    const documentId = await alice.as.mutation(api.documents.createInFolder, { space: "events", title: "Notes" });
+    const doc = await alice.as.query(api.documents.get, { documentId });
+    expect(doc?.parent.kind).toBe("file");
+    if (doc?.parent.kind !== "file") throw new Error("expected file parent");
+    const fileId = doc.parent.fileId;
+
+    const v1 = JSON.stringify({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "draft" }] }],
+    });
+    const v2 = JSON.stringify({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "final" }] }],
+    });
+    await alice.as.mutation(api.prosemirror.submitSnapshot, { id: documentId, version: 2, content: v1 });
+    await lead.as.mutation(api.prosemirror.submitSnapshot, { id: documentId, version: 3, content: v2 });
+
+    const history = await alice.as.query(api.files.history, { fileId });
+    const edits = history!.events.filter((e) => e.action === "edited");
+    expect(edits).toHaveLength(1);
+    expect(edits[0].actors.map((a) => a!._id).sort()).toEqual([alice.userId, lead.userId].sort());
+    expect(edits[0].beforeText).toBe("");
+    expect(edits[0].afterText).toContain("final");
+    expect(edits[0].canRevert).toBe(true);
+
+    await alice.as.mutation(api.files.revertEdit, { eventId: edits[0]._id });
+    const text = (await t.run((ctx) => ctx.db.get("documents", documentId)))?.text ?? "";
+    expect(text).toBe("");
+    expect((await alice.as.query(api.files.history, { fileId }))!.events.some((e) => e.action === "reverted")).toBe(true);
+  });
 });
 
 describe("task description mentions", () => {

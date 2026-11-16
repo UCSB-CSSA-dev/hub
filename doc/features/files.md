@@ -125,7 +125,7 @@ Beyond space roles, a file can have **extra grants** (`fileGrants`):
 - The **owner** (uploader) always has full access and can revoke grants.
 - **Writers** (space write, grant write, or owner) may grant others write or read; **readers** may grant read only.
 - 主席团 / 部长 / 系统管理员 always have **read** oversight of every file; folder/space browse rules still apply for listing.
-- Each file has Access and History actions (top-right / row menu): who has access, add/revoke grants, and a short work log (`fileEvents`: created, renamed, moved, trashed, granted, linked to a task, …).
+- Each file has Access and History actions (top-right / row menu): who has access, add/revoke grants, and a work log for the **past 15 days** (`fileEvents`: created, renamed, moved, trashed, granted, linked to a task, document **edited** / **reverted**, …). Document saves within a 30‑minute window share one “edited” row (all collaborators listed). Each edit stores before/after text (and content when small enough) so History can **preview**, **diff** with another version, and **revert** to before that session.
 
 ## Task files
 
@@ -161,7 +161,7 @@ Search file names (case-insensitive substring) across the spaces the viewer can 
 | `files.setQuota` | mutation | 主席团 only |
 | `files.folderTree` | query | Folders of a space, for the move and save pickers |
 | `files.purge` | mutation | Managers: delete a trashed file or folder for good |
-| `files.listAccess`, `files.grant`, `files.revoke`, `files.history` | query / mutation | Per-file grants and work history |
+| `files.listAccess`, `files.grant`, `files.revoke`, `files.history`, `files.revertEdit` | query / mutation | Per-file grants, 15-day history (preview/diff/revert for document edits) |
 | `files.linkToTask` | mutation | Attach an existing writable file to a task and grant access |
 | `documents.createInFolder` | mutation | New document in a folder (see [Documents](#documents)) |
 | `internal.files.purgeTrash` | internal mutation | Daily cron: deletes trash older than 30 days |

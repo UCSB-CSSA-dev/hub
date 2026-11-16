@@ -1,12 +1,14 @@
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { logAudit } from "./lib/audit";
 import { requireChannelAccess } from "./lib/channels";
 import { LIMITS, PUBLIC_SPACE, type ErrorCode } from "./lib/constants";
+import { snapshotText } from "./lib/docText";
 import { appError } from "./lib/errors";
 import {
+  asEditMeta,
   breadcrumb,
   chargeQuota,
   cleanName,
@@ -17,6 +19,7 @@ import {
   getFileGrant,
   isBlockedFile,
   listChildren,
+  FILE_HISTORY_MS,
   loadSpace,
   logFileEvent,
   purgeFile,
@@ -774,18 +777,25 @@ export const grant = mutation({
     if (args.userId === file.uploadedBy) throw appError("INVALID", "userId");
     const user = await ctx.db.get("users", args.userId);
     if (!user || user.status !== "approved") throw appError("NOT_FOUND");
+    const existing = await getFileGrant(ctx, file._id, args.userId);
+    const fromLevel = existing?.level;
     const changed = await upsertFileGrant(ctx, {
       fileId: file._id,
       userId: args.userId,
       level: args.level,
       grantedBy: viewer.user._id,
+      exact: true,
     });
     if (changed) {
       await logFileEvent(ctx, {
         fileId: file._id,
         actorId: viewer.user._id,
         action: "granted",
-        metadata: { userId: args.userId, level: args.level },
+        metadata: {
+          userId: args.userId,
+          level: args.level,
+          ...(fromLevel && fromLevel !== args.level ? { fromLevel } : {}),
+        },
       });
     }
   },
@@ -810,7 +820,7 @@ export const revoke = mutation({
   },
 });
 
-/** Recent work history for a file the viewer can open. */
+/** Work history for a file (last 15 days): ACL changes plus document edits. */
 export const history = query({
   args: { fileId: v.id("files") },
   handler: async (ctx, args) => {
@@ -819,21 +829,114 @@ export const history = query({
     if (!file || file.deletedAt) return null;
     const permission = await filePermission(ctx, viewer, file);
     if (!permission.view) return null;
-    const events = (
-      await ctx.db
-        .query("fileEvents")
-        .withIndex("by_file", (q) => q.eq("fileId", file._id))
-        .order("desc")
-        .take(40)
-    );
-    const people = await getUserSummaries(ctx, events.map((e) => e.actorId));
-    return events.map((e) => ({
-      _id: e._id,
-      _creationTime: e._creationTime,
-      action: e.action,
-      actor: people.get(e.actorId) ?? null,
-      metadata: e.metadata ?? null,
-    }));
+    const cutoff = Date.now() - FILE_HISTORY_MS;
+    const raw = await ctx.db
+      .query("fileEvents")
+      .withIndex("by_file", (q) => q.eq("fileId", file._id))
+      .order("desc")
+      .take(80);
+    const events = raw.filter((e) => e._creationTime >= cutoff);
+    const actorIds = new Set<Id<"users">>();
+    for (const e of events) {
+      actorIds.add(e.actorId);
+      const editMeta = e.action === "edited" || e.action === "reverted" ? asEditMeta(e.metadata) : null;
+      for (const id of editMeta?.actorIds ?? []) actorIds.add(id);
+      const targetId = accessTargetId(e.metadata);
+      if (targetId) actorIds.add(targetId);
+    }
+    const people = await getUserSummaries(ctx, [...actorIds]);
+    return {
+      canRevert: permission.write && Boolean(file.documentId),
+      events: events.map((e) => {
+        const meta = e.action === "edited" || e.action === "reverted" ? asEditMeta(e.metadata) : null;
+        const actors = (meta?.actorIds?.length ? meta.actorIds : [e.actorId]).map(
+          (id) => people.get(id) ?? null,
+        );
+        const access = accessChange(e.metadata);
+        return {
+          _id: e._id,
+          _creationTime: e._creationTime,
+          endedAt: meta?.endedAt ?? e._creationTime,
+          action: e.action,
+          actor: people.get(e.actorId) ?? null,
+          actors: actors.filter(Boolean),
+          target: access?.userId ? (people.get(access.userId) ?? null) : null,
+          level: access?.level ?? null,
+          fromLevel: access?.fromLevel ?? null,
+          beforeText: meta?.beforeText ?? null,
+          afterText: meta?.afterText ?? null,
+          canPreview: Boolean(meta?.beforeText || meta?.afterText),
+          canDiff: Boolean(meta?.beforeText || meta?.afterText),
+          canRevert: permission.write && Boolean(meta?.beforeContent),
+        };
+      }),
+    };
+  },
+});
+
+function accessTargetId(raw: unknown): Id<"users"> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const userId = (raw as { userId?: unknown }).userId;
+  return typeof userId === "string" ? (userId as Id<"users">) : null;
+}
+
+function accessChange(raw: unknown): {
+  userId: Id<"users">;
+  level: "read" | "write" | null;
+  fromLevel: "read" | "write" | null;
+} | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as { userId?: unknown; level?: unknown; fromLevel?: unknown };
+  if (typeof m.userId !== "string") return null;
+  const level = m.level === "read" || m.level === "write" ? m.level : null;
+  const fromLevel = m.fromLevel === "read" || m.fromLevel === "write" ? m.fromLevel : null;
+  return { userId: m.userId as Id<"users">, level, fromLevel };
+}
+
+/** Restore a Files document to the content from before an edit session. */
+export const revertEdit = mutation({
+  args: { eventId: v.id("fileEvents") },
+  handler: async (ctx, args) => {
+    const viewer = await requireApproved(ctx);
+    const event = await ctx.db.get("fileEvents", args.eventId);
+    if (!event || event.action !== "edited") throw appError("NOT_FOUND");
+    const meta = asEditMeta(event.metadata);
+    if (!meta?.beforeContent) throw appError("INVALID", "snapshot");
+    const { file } = await requireFileWrite(ctx, viewer, event.fileId);
+    if (!file.documentId) throw appError("INVALID", "not_document");
+
+    const latest = await ctx.runQuery(components.prosemirrorSync.lib.latestVersion, {
+      id: file.documentId,
+    });
+    const version = (latest ?? 0) + 1;
+    await ctx.runMutation(components.prosemirrorSync.lib.submitSnapshot, {
+      id: file.documentId,
+      version,
+      content: meta.beforeContent,
+      pruneSnapshots: true,
+    });
+
+    const text = snapshotText(meta.beforeContent);
+    const now = Date.now();
+    await ctx.db.patch("documents", file.documentId, {
+      updatedAt: now,
+      updatedBy: viewer.user._id,
+      text,
+    });
+    await logFileEvent(ctx, {
+      fileId: file._id,
+      actorId: viewer.user._id,
+      action: "reverted",
+      metadata: {
+        beforeText: meta.afterText,
+        afterText: meta.beforeText,
+        beforeContent: meta.afterContent,
+        afterContent: meta.beforeContent,
+        actorIds: [viewer.user._id],
+        endedAt: now,
+        version,
+      },
+    });
   },
 });
 
