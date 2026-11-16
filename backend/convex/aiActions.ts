@@ -59,15 +59,6 @@ export const answer = internalAction({
         () => DRY_RUN_ANSWER,
       );
       await ctx.runMutation(internal.ai.finish, { requestId: args.requestId, text, model: models.answer });
-
-      // Eligible creators who ask to create a task/event get a draft suggestion card (human confirms).
-      const intent = await ctx.runQuery(internal.ai.createIntentJob, { requestId: args.requestId });
-      if (intent) {
-        const result = await chatJson(models.fast, intent.prompt, () => ({ action: "none" })).catch(() => null);
-        if (result && (result.action === "create_task" || result.action === "create_event")) {
-          await ctx.runMutation(internal.ai.suggest, { messageId: intent.messageId, result });
-        }
-      }
     } catch (error) {
       await ctx.runMutation(internal.ai.fail, {
         requestId: args.requestId,

@@ -6,7 +6,7 @@ import { channelAccess, channelAudience, explicitMembers, presidiumUserIds, type
 import { LIMITS } from "./constants";
 import { snapshotText } from "./docText";
 import { appError } from "./errors";
-import { filePermission, loadSpace, spaceAccess, type Space, type SpaceAccess } from "./files";
+import { inTaskFolder, loadSpace, spaceAccess, type Space, type SpaceAccess } from "./files";
 import { notifyMany } from "./notify";
 import { buildViewerContext, requireApproved, type ViewerContext } from "./permissions";
 import { taskAccess, type TaskAccess } from "./tasks";
@@ -90,14 +90,14 @@ export async function documentAccessFor(ctx: QueryCtx, viewer: ViewerContext, id
     if (!file || file.deletedAt) throw appError("NOT_FOUND");
     const space = await loadSpace(ctx, file.departmentId);
     const access = spaceAccess(viewer, space.department);
-    const permission = await filePermission(ctx, viewer, file);
-    if (!permission.view) throw appError("NOT_FOUND");
-    const canDelete = permission.write && (access.manage || file.uploadedBy === me);
+    if (!access.view) throw appError("NOT_FOUND");
+    const own = file.uploadedBy === me && (access.upload || (await inTaskFolder(ctx, file.folderId)));
+    const canDelete = access.manage || own;
     return {
       viewer,
       doc,
       parent: { kind: "file", file, space, access },
-      canEdit: permission.write,
+      canEdit: access.upload || canDelete,
       canDelete,
     };
   }

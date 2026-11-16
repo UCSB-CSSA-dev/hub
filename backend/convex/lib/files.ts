@@ -7,16 +7,6 @@ import { isLeadOf, type ViewerContext } from "./permissions";
 
 export type SpaceAccess = { view: boolean; upload: boolean; manage: boolean };
 
-/** Per-file rights: space rules, owner, grants, and 主席团/部长/系统管理员 read-all. */
-export type FilePermission = {
-  view: boolean;
-  write: boolean;
-  /** Uploader (or space manager): can revoke grants and edit the access list. */
-  manageAccess: boolean;
-  /** Highest level this viewer may grant to someone else. */
-  canGrant: "read" | "write" | null;
-};
-
 /** A file space: 公共 (no department), 主席团 (the presidium department), or a department. */
 export type Space = { departmentId: Id<"departments"> | undefined; department: Doc<"departments"> | null };
 
@@ -218,16 +208,6 @@ export async function storageInUse(ctx: QueryCtx, storageId: Id<"_storage">) {
  * Drive files don't count toward quota; they go to the Drive trash. Documents lose their content.
  */
 export async function purgeFile(ctx: MutationCtx, file: Doc<"files">) {
-  const grants = await ctx.db
-    .query("fileGrants")
-    .withIndex("by_file", (q) => q.eq("fileId", file._id))
-    .collect();
-  for (const grant of grants) await ctx.db.delete("fileGrants", grant._id);
-  const events = await ctx.db
-    .query("fileEvents")
-    .withIndex("by_file", (q) => q.eq("fileId", file._id))
-    .collect();
-  for (const event of events) await ctx.db.delete("fileEvents", event._id);
   await ctx.db.delete("files", file._id);
   if (file.documentId) {
     await ctx.db.delete("documents", file.documentId);
@@ -255,113 +235,6 @@ export async function trashFolderTree(ctx: MutationCtx, folder: Doc<"folders">, 
       if (!file.deletedAt) await ctx.db.patch("files", file._id, deleted);
     }
   }
-}
-
-/** 主席团, 系统管理员, and any 部长 can read every file (space browse rules still apply separately). */
-export function canOversightReadFiles(viewer: ViewerContext) {
-  return viewer.isAdmin || viewer.ledDepartmentIds.length > 0;
-}
-
-export async function getFileGrant(ctx: QueryCtx, fileId: Id<"files">, userId: Id<"users">) {
-  return await ctx.db
-    .query("fileGrants")
-    .withIndex("by_file_user", (q) => q.eq("fileId", fileId).eq("userId", userId))
-    .unique();
-}
-
-export async function filePermission(
-  ctx: QueryCtx,
-  viewer: ViewerContext,
-  file: Doc<"files">,
-): Promise<FilePermission> {
-  const space = await loadSpace(ctx, file.departmentId);
-  const access = spaceAccess(viewer, space.department);
-  const isOwner = file.uploadedBy === viewer.user._id;
-  const grant = await getFileGrant(ctx, file._id, viewer.user._id);
-  const taskFolder = await inTaskFolder(ctx, file.folderId);
-
-  let view = access.view || canOversightReadFiles(viewer) || isOwner || grant !== null;
-  let write =
-    access.manage ||
-    (isOwner && (access.upload || taskFolder)) ||
-    grant?.level === "write" ||
-    isOwner;
-
-  // Owner always keeps view + write + access management on their file.
-  if (isOwner) {
-    view = true;
-    write = true;
-  }
-
-  const manageAccess = isOwner || access.manage;
-  const canGrant: FilePermission["canGrant"] = write ? "write" : view ? "read" : null;
-  return { view, write, manageAccess, canGrant };
-}
-
-export async function requireFileView(ctx: QueryCtx, viewer: ViewerContext, fileId: Id<"files">) {
-  const file = await ctx.db.get("files", fileId);
-  if (!file || file.deletedAt) throw appError("NOT_FOUND");
-  const permission = await filePermission(ctx, viewer, file);
-  if (!permission.view) throw appError("NOT_FOUND");
-  return { file, permission };
-}
-
-export async function requireFileWrite(ctx: QueryCtx, viewer: ViewerContext, fileId: Id<"files">) {
-  const { file, permission } = await requireFileView(ctx, viewer, fileId);
-  if (!permission.write) throw appError("FORBIDDEN");
-  return { file, permission };
-}
-
-export async function logFileEvent(
-  ctx: MutationCtx,
-  args: {
-    fileId: Id<"files">;
-    actorId: Id<"users">;
-    action: string;
-    metadata?: Record<string, unknown>;
-  },
-) {
-  await ctx.db.insert("fileEvents", {
-    fileId: args.fileId,
-    actorId: args.actorId,
-    action: args.action,
-    metadata: args.metadata,
-  });
-}
-
-/** Upserts a grant; write beats read. Returns whether anything changed. */
-export async function upsertFileGrant(
-  ctx: MutationCtx,
-  args: {
-    fileId: Id<"files">;
-    userId: Id<"users">;
-    level: "read" | "write";
-    grantedBy: Id<"users">;
-    assignmentId?: Id<"assignments">;
-  },
-) {
-  if (args.userId === args.grantedBy) {
-    const file = await ctx.db.get("files", args.fileId);
-    if (file?.uploadedBy === args.userId) return false;
-  }
-  const existing = await getFileGrant(ctx, args.fileId, args.userId);
-  if (existing) {
-    const nextLevel = existing.level === "write" || args.level === "write" ? "write" : "read";
-    const patch: Partial<Doc<"fileGrants">> = {};
-    if (nextLevel !== existing.level) patch.level = nextLevel;
-    if (args.assignmentId && !existing.assignmentId) patch.assignmentId = args.assignmentId;
-    if (Object.keys(patch).length === 0) return false;
-    await ctx.db.patch("fileGrants", existing._id, patch);
-    return true;
-  }
-  await ctx.db.insert("fileGrants", {
-    fileId: args.fileId,
-    userId: args.userId,
-    level: args.level,
-    grantedBy: args.grantedBy,
-    assignmentId: args.assignmentId,
-  });
-  return true;
 }
 
 /** The task's folder ("任务 Tasks / <title>"), created on first use. */

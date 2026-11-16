@@ -10,14 +10,12 @@ import {
   FolderIcon,
   FolderInputIcon,
   FolderPlusIcon,
-  HistoryIcon,
   LockIcon,
   MoreHorizontalIcon,
   PencilIcon,
   RotateCcwIcon,
   SearchIcon,
   Share2Icon,
-  ShieldIcon,
   Trash2Icon,
   UploadIcon,
   XIcon,
@@ -32,7 +30,6 @@ import { NewDocumentDialog } from "@/components/docs/task-documents";
 import { downloadFile } from "@/lib/file-cache";
 import { formatBytes } from "@/lib/format";
 import { FileTypeIcon } from "@/components/files/file-icon";
-import { AccessSheet, HistorySheet } from "@/components/files/file-access";
 import {
   MoveDialog,
   NameDialog,
@@ -572,22 +569,11 @@ function FileRow({
   const format = useFormatter();
   const tDocs = useTranslations("docs");
   const showError = useErrorToast();
-  const [accessOpen, setAccessOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const accessLabel =
-    file.myAccess === "owner"
-      ? t("accessOwner")
-      : file.myAccess === "write"
-        ? t("accessWrite")
-        : file.myAccess === "read"
-          ? t("accessRead")
-          : null;
   const meta = [
     file.documentId ? tDocs("document") : formatBytes(file.size),
     file.uploadedBy ? displayName(file.uploadedBy, locale) : null,
     format.dateTime(file._creationTime, { dateStyle: "medium" }),
     file.drive ? t("inDrive") : null,
-    accessLabel,
   ].filter(Boolean);
   return (
     <div className="group flex items-center gap-3 px-3 py-2 hover:bg-surface-hover">
@@ -605,14 +591,6 @@ function FileRow({
           <span className="block truncate text-xs text-muted-foreground">{meta.join(" · ")}</span>
         </span>
       </button>
-      <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
-        <Button size="icon-sm" variant="ghost" aria-label={t("accessTitle")} onClick={() => setAccessOpen(true)}>
-          <ShieldIcon />
-        </Button>
-        <Button size="icon-sm" variant="ghost" aria-label={t("historyTitle")} onClick={() => setHistoryOpen(true)}>
-          <HistoryIcon />
-        </Button>
-      </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="icon-sm" variant="ghost" aria-label={t("more")}>
@@ -643,14 +621,6 @@ function FileRow({
             <Share2Icon />
             {t("shareToChat")}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setAccessOpen(true)}>
-            <ShieldIcon />
-            {t("accessTitle")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
-            <HistoryIcon />
-            {t("historyTitle")}
-          </DropdownMenuItem>
           {file.canEdit ? (
             <>
               <DropdownMenuItem onSelect={onRename}>
@@ -672,8 +642,6 @@ function FileRow({
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
-      <AccessSheet fileId={file._id} open={accessOpen} onOpenChange={setAccessOpen} />
-      <HistorySheet fileId={file._id} open={historyOpen} onOpenChange={setHistoryOpen} />
     </div>
   );
 }

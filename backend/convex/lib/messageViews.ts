@@ -2,7 +2,6 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { canActOnSuggestion } from "./ai/suggestions";
 import { LIMITS, PUBLIC_SPACE } from "./constants";
-import { filePermission } from "./files";
 import { messageState, type MessageState } from "./messages";
 import { buildViewerContext, type ViewerContext } from "./permissions";
 import { eventEnd } from "./tasks";
@@ -198,7 +197,7 @@ async function forwardView(
 async function sharedFileViews(
   ctx: QueryCtx,
   fileIds: Id<"files">[],
-  viewer: ViewerContext | null,
+  isAdmin: () => Promise<boolean>,
 ): Promise<SharedFileView[]> {
   const views: SharedFileView[] = [];
   for (const fileId of fileIds) {
@@ -219,7 +218,6 @@ async function sharedFileViews(
       continue;
     }
     const department = file.departmentId ? await ctx.db.get("departments", file.departmentId) : null;
-    const canView = viewer ? (await filePermission(ctx, viewer, file)).view : false;
     views.push({
       _id: file._id,
       name: file.name,
@@ -229,7 +227,7 @@ async function sharedFileViews(
       spaceNameZh: department?.nameZh ?? "公共",
       spaceNameEn: department?.nameEn ?? "Public",
       deleted: file.deletedAt !== undefined,
-      canView,
+      canView: department?.kind === "presidium" ? await isAdmin() : true,
       documentId: file.documentId ?? null,
     });
   }
@@ -332,6 +330,7 @@ export async function toMessageViews(
     }
     return viewerCache;
   };
+  const isAdmin = async () => (await viewer())?.isAdmin ?? false;
   const views: MessageView[] = [];
   for (const message of messages) {
     const people = new Set<string>([message.authorId]);
@@ -429,7 +428,7 @@ export async function toMessageViews(
       attachments: await attachmentViews(ctx, attachmentRows),
       system,
       forward,
-      files: state === "normal" ? await sharedFileViews(ctx, message.fileIds ?? [], await viewer()) : [],
+      files: state === "normal" ? await sharedFileViews(ctx, message.fileIds ?? [], isAdmin) : [],
       task: message.assignmentId ? await taskCard(ctx, message.assignmentId, viewerId) : undefined,
       doc: message.documentId ? await docCard(ctx, message.documentId) : undefined,
       ai,

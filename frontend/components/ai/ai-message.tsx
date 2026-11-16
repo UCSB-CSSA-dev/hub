@@ -17,7 +17,6 @@ import { useViewer } from "@/components/auth/account-state";
 import { useChat } from "@/components/chat/chat-context";
 import { Markdown } from "@/components/chat/markdown";
 import { personById, type Message } from "@/components/chat/types";
-import { AssignmentFormDialog } from "@/components/tasks/assignment-form-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -232,7 +231,6 @@ function SuggestionCard({ message, suggestion }: { message: Message; suggestion:
   const { channel } = useChat();
   const dismiss = useMutation(api.ai.dismissSuggestion);
   const showError = useErrorToast();
-  const [formOpen, setFormOpen] = useState(false);
 
   if (!suggestion) return <p className="text-sm text-muted-foreground italic">{t("suggestionGone")}</p>;
   const { fields, action } = suggestion;
@@ -252,6 +250,10 @@ function SuggestionCard({ message, suggestion }: { message: Message; suggestion:
     [t("field.location"), fields.location ?? null],
     [t("field.description"), fields.description ?? null],
   ];
+  const href =
+    action === "edit" && suggestion.assignmentId
+      ? `/assignments/new/?a=${suggestion.assignmentId}&s=${suggestion._id}`
+      : `/assignments/new/?c=${channel._id}&s=${suggestion._id}${action === "create_event" ? "&kind=event" : ""}`;
 
   return (
     <div className="mt-0.5 max-w-md rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
@@ -283,8 +285,10 @@ function SuggestionCard({ message, suggestion }: { message: Message; suggestion:
           <span className="text-xs text-muted-foreground">{t("suggestionDismissed")}</span>
         ) : suggestion.canAct ? (
           <>
-            <Button size="xs" onClick={() => setFormOpen(true)}>
-              {action === "edit" ? t("actionEdit") : action === "create_event" ? t("actionEvent") : t("actionTask")}
+            <Button asChild size="xs">
+              <Link href={href}>
+                {action === "edit" ? t("actionEdit") : action === "create_event" ? t("actionEvent") : t("actionTask")}
+              </Link>
             </Button>
             <Button
               size="xs"
@@ -294,14 +298,6 @@ function SuggestionCard({ message, suggestion }: { message: Message; suggestion:
               <XIcon />
               {t("dismiss")}
             </Button>
-            <AssignmentFormDialog
-              open={formOpen}
-              onOpenChange={setFormOpen}
-              channelId={channel._id}
-              suggestionId={suggestion._id}
-              assignmentId={action === "edit" ? suggestion.assignmentId : undefined}
-              kind={action === "create_event" ? "event" : "task"}
-            />
           </>
         ) : (
           <span className="text-xs text-muted-foreground">{t("suggestionWho")}</span>

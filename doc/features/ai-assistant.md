@@ -5,7 +5,7 @@
 小飒 (Sasa) is CSSA Hub's AI assistant, shown with the animated character in `frontend/public/brand/idle.gif` and `think.gif`. It does three things:
 
 1. **Answers questions in chats with AI mode on.** Anyone in such a chat can write `@小飒` or `@Sasa` to ask what was discussed earlier, which tasks, events or meetings the chat has, or to brainstorm. The answer streams into the chat.
-2. **Suggests tasks.** In chats with AI mode on, 小飒 reads each new message and, when someone hands out a task or event or changes one, posts a card whose button opens the prefilled task form in chat. Eligible members who ask `@小飒` to create a task or event get the same card after the answer (they still confirm in the form).
+2. **Suggests tasks.** In chats with AI mode on, 小飒 reads each new message and, when someone hands out a task or event or changes one, posts a card with a button that opens the task form already filled in.
 3. **A private chat with each member.** Pinned at the top of the chat list and reachable from a floating button on every page, it answers questions about the member's own tasks, deadlines, events and meetings, and about chats with AI mode on that the member takes part in.
 4. **Works with documents.** It summarizes a document and finds the tasks, events, announcements and task changes in it ([Document summaries](#document-summaries)); writes or rewrites a document from a prompt, such as turning a transcript into meeting notes ([Writing with 小飒](#writing-with-小飒)); and answers questions about documents attached to a question ([Questions about documents](#questions-about-documents)).
 
@@ -142,21 +142,20 @@ stateDiagram-v2
 
 ## Task suggestions
 
-Each user message sent in a chat with AI mode on is checked for task work (except `@小飒` questions, which use the path below instead of the free scan):
+Each user message sent in a chat with AI mode on is checked for task work:
 
 1. A cheap keyword and date pre-filter (`lib/ai/prefilter.ts`, Chinese and English) skips messages that clearly aren't about tasks.
 2. Up to 60 model calls per chat per hour (`AI_MODEL_FAST`) read the message with the chat's members, its open tasks and the previous few messages, and return `none`, `create_task`, `create_event` or `edit` (with the task to edit) plus title, description, assignees, due date or start and end time, and location. Results with confidence below 0.6 are dropped.
 3. 小飒 posts a suggestion card that `@`-mentions the suggested assignees (who get a `mention` notification) and lists the fields.
 
-**@小飒 create asks.** When someone who can create tasks in that chat (`canCreateTaskIn`: 主席团 / 部长 / system admin as for that channel) asks `@小飒` to create a task or event, the answer path also runs a create-intent JSON call (same field shape as scan, `create_task` / `create_event` only). If it matches, 小飒 posts the same suggestion card via shared `ai.suggest` logic — never auto-creating the assignment. Members who cannot create tasks get a normal answer and no card. The answer prompt tells eligible askers a draft card will appear for them to confirm.
-
 **The card's buttons**
 
-- **创建任务 / 创建活动** and **修改任务** open an in-chat popup with the prefilled task form (`AssignmentFormDialog` / shared `TaskForm`); the full `/assignments/new/?…` page still works for deep links. Create needs `canCreateTaskIn`; edit needs `taskAccess.review` while the task is open.
+- **创建任务 / 创建活动** opens `/assignments/new/?c=<chat>&s=<suggestion>` (`&kind=event` for events) for people who can create tasks in that chat (`canCreateTaskIn`).
+- **修改任务** opens `/assignments/new/?a=<task>&s=<suggestion>` for people who can review that task (`taskAccess.review`), only while the task is open.
 - **忽略 / Dismiss** for the same people.
 - Others see "可以在这个聊天里布置任务的人才能采纳".
 
-The form shows "已根据小飒的建议填写，保存前请检查一遍。" and is fully editable. Saving passes `suggestionId`, which marks the card **已采纳 / Applied**. For an open task, suggested new assignees are listed as "保存时添加" and added with `assignments.addAssignees` after saving. A card that's already applied or dismissed opens the plain form. The chat composer's task button uses the same in-chat dialog.
+The form shows "已根据小飒的建议填写，保存前请检查一遍。" and is fully editable. Saving passes `suggestionId`, which marks the card **已采纳 / Applied**. For an open task, suggested new assignees are listed as "保存时添加" and added with `assignments.addAssignees` after saving. A card that's already applied or dismissed opens the plain form.
 
 ## Admin page (/admin/ai)
 

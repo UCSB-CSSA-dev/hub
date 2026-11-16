@@ -13,12 +13,10 @@ type ModelCall = { model: string; stream: boolean; messages: { role: string; con
 type FakeConfig = {
   filter?: Record<string, unknown> | "error";
   scan?: Record<string, unknown>;
-  /** Reply for post-answer create-intent detection; falls back to `scan` then `{ action: "none" }`. */
-  createIntent?: Record<string, unknown>;
   answer?: string[] | "error" | "broken";
 };
 
-/** Fakes the UCSB AI endpoint: JSON replies for the filter, scan and create-intent, SSE for answers. */
+/** Fakes the UCSB AI endpoint: JSON replies for the filter and scan, SSE for answers. */
 function fakeAi(config: FakeConfig = {}) {
   process.env.AI_API_KEY = "test-key";
   const calls: ModelCall[] = [];
@@ -26,14 +24,8 @@ function fakeAi(config: FakeConfig = {}) {
     const body = JSON.parse(init.body) as ModelCall;
     calls.push(body);
     if (!body.stream) {
-      const system = body.messages[0].content;
-      const isFilter = system.includes("gatekeeper");
-      const isCreateIntent = system.includes("draft a new task or event");
-      const reply = isFilter
-        ? (config.filter ?? { relevant: true, keywords: [] })
-        : isCreateIntent
-          ? (config.createIntent ?? config.scan ?? { action: "none" })
-          : (config.scan ?? { action: "none" });
+      const isFilter = body.messages[0].content.includes("gatekeeper");
+      const reply = isFilter ? (config.filter ?? { relevant: true, keywords: [] }) : (config.scan ?? { action: "none" });
       if (reply === "error") return new Response("boom", { status: 500 });
       return Response.json({ choices: [{ message: { content: JSON.stringify(reply) } }] });
     }
@@ -499,57 +491,5 @@ describe("task suggestions", () => {
     await alice.as.mutation(api.messages.send, { channelId: events, body: "明天之前交海报" });
     const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     expect(scheduled.some((s) => s.name.includes("scan"))).toBe(false);
-  });
-
-  test("eligible @小飒 create ask posts a suggestion card; ineligible does not", async () => {
-    vi.useFakeTimers();
-    const t = setup();
-    const people = await team(t);
-    const { lead, alice, bob, events } = people;
-    fakeAi({
-      createIntent: {
-        action: "create_task",
-        title: "Design the poster",
-        assigneeIds: [bob.userId],
-        summary: "要不要创建海报设计任务？",
-        confidence: 0.95,
-      },
-      answer: ["好的，我准备了一份草稿，请确认。"],
-    });
-    await people.admin.as.mutation(api.ai.setAiMode, { channelId: events, enabled: true });
-
-    await lead.as.mutation(api.messages.send, {
-      channelId: events,
-      body: `@小飒 帮我创建一个任务，让 <@${bob.userId}> 设计海报`,
-    });
-    await run(t);
-
-    const leadCards = (await sasaMessages(t, events)).filter((m) => m.ai?.suggestionId);
-    expect(leadCards).toHaveLength(1);
-    const suggestion = await t.run((ctx) => ctx.db.get("aiSuggestions", leadCards[0].ai!.suggestionId!));
-    expect(suggestion).toMatchObject({
-      action: "create_task",
-      status: "pending",
-      fields: { title: "Design the poster", assigneeIds: [bob.userId] },
-    });
-    expect((await lead.as.query(api.ai.getSuggestion, { suggestionId: suggestion!._id }))?.canAct).toBe(true);
-
-    // A 部员 asking the same thing gets an answer but no create-intent card.
-    fakeAi({
-      createIntent: {
-        action: "create_task",
-        title: "Should not post",
-        confidence: 0.99,
-      },
-      answer: ["需要部长来创建任务。"],
-    });
-    await alice.as.mutation(api.messages.send, {
-      channelId: events,
-      body: `@小飒 帮我创建一个任务让 <@${bob.userId}> 买零食`,
-    });
-    await run(t);
-    const after = await sasaMessages(t, events);
-    expect(after.filter((m) => m.ai?.suggestionId)).toHaveLength(1);
-    expect(after.some((m) => m.body.includes("需要部长"))).toBe(true);
   });
 });

@@ -7,7 +7,6 @@ import { aiReadableChannel } from "./lib/ai/sasa";
 import { logAudit } from "./lib/audit";
 import {
   channelAudience,
-  memberIsMuted,
   requireChannelAccess,
   touchReadState,
   userParticipates,
@@ -16,7 +15,7 @@ import {
 import { LIMITS, REACTIONS } from "./lib/constants";
 import { canReadDocument, docSharedIn } from "./lib/documents";
 import { appError } from "./lib/errors";
-import { filePermission } from "./lib/files";
+import { loadSpace, spaceAccess } from "./lib/files";
 import {
   eraseMessageContent,
   isLiveUserContent,
@@ -164,12 +163,12 @@ async function notifyForMessage(
     .collect();
   if (channel.type === "dm") {
     const recipients = members
-      .filter((m) => m.joinedAt !== undefined && !memberIsMuted(m) && !notified.has(m.userId))
+      .filter((m) => m.joinedAt !== undefined && !m.muted && !notified.has(m.userId))
       .map((m) => m.userId);
     await queuePush(ctx, recipients, { type: "dm", params: base.params, link: base.link, tag: messageId });
     return;
   }
-  const muted = new Set(members.filter((m) => memberIsMuted(m)).map((m) => m.userId));
+  const muted = new Set(members.filter((m) => m.muted).map((m) => m.userId));
   const recipients = (await channelAudience(ctx, channel)).filter((id) => !notified.has(id) && !muted.has(id));
   const params: Record<string, unknown> = { ...base.params };
   if (channel.name) params.name = channel.name;
@@ -207,7 +206,8 @@ export const send = mutation({
     for (const fileId of fileIds) {
       const file = await ctx.db.get("files", fileId);
       if (!file || file.deletedAt) throw appError("INVALID", "fileIds");
-      if (!(await filePermission(ctx, viewer, file)).view) throw appError("INVALID", "fileIds");
+      const space = await loadSpace(ctx, file.departmentId);
+      if (!spaceAccess(viewer, space.department).view) throw appError("INVALID", "fileIds");
     }
     const body = cleanBody(args.body, attachmentIds.length > 0 || fileIds.length > 0);
 
