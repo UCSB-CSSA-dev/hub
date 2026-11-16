@@ -2,6 +2,7 @@ import { components, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { BLOCKED_EXTENSIONS, LIMITS, PUBLIC_SPACE } from "./constants";
+import { snapshotText } from "./docText";
 import { appError } from "./errors";
 import { isLeadOf, type ViewerContext } from "./permissions";
 
@@ -312,6 +313,28 @@ export async function requireFileWrite(ctx: QueryCtx, viewer: ViewerContext, fil
   return { file, permission };
 }
 
+/** Work history kept on the Access sheet (matches chat attachment retention). */
+export const FILE_HISTORY_MS = 15 * 24 * 60 * 60 * 1000;
+
+/**
+ * Keep folding saves into one session while anyone is still editing.
+ * A quiet gap longer than this starts a new history row.
+ */
+const EDIT_COALESCE_MS = 30 * 60 * 1000;
+
+/** Cap stored ProseMirror JSON so history rows stay small enough to patch. */
+const EDIT_CONTENT_MAX = 150_000;
+
+export type DocumentEditMeta = {
+  beforeText: string;
+  afterText: string;
+  beforeContent?: string;
+  afterContent?: string;
+  actorIds: Id<"users">[];
+  endedAt: number;
+  version?: number;
+};
+
 export async function logFileEvent(
   ctx: MutationCtx,
   args: {
@@ -329,7 +352,96 @@ export async function logFileEvent(
   });
 }
 
-/** Upserts a grant; write beats read. Returns whether anything changed. */
+function clipEditContent(content: string) {
+  return content.length <= EDIT_CONTENT_MAX ? content : undefined;
+}
+
+function asEditMeta(raw: unknown): DocumentEditMeta | null {
+  if (!raw || typeof raw !== "object") return null;
+  const m = raw as Record<string, unknown>;
+  if (typeof m.beforeText !== "string" || typeof m.afterText !== "string") return null;
+  if (typeof m.endedAt !== "number" || !Array.isArray(m.actorIds)) return null;
+  return {
+    beforeText: m.beforeText,
+    afterText: m.afterText,
+    beforeContent: typeof m.beforeContent === "string" ? m.beforeContent : undefined,
+    afterContent: typeof m.afterContent === "string" ? m.afterContent : undefined,
+    actorIds: m.actorIds.filter((id): id is Id<"users"> => typeof id === "string"),
+    endedAt: m.endedAt,
+    version: typeof m.version === "number" ? m.version : undefined,
+  };
+}
+
+/**
+ * Records a document content edit on its Files row.
+ * Collaborators who save within the coalesce window share one session (actors + before/after).
+ */
+export async function logDocumentEdit(
+  ctx: MutationCtx,
+  args: {
+    fileId: Id<"files">;
+    documentId: Id<"documents">;
+    actorId: Id<"users">;
+    afterContent: string;
+    afterText: string;
+    version?: number;
+  },
+) {
+  const now = Date.now();
+  const prev = await ctx.runQuery(components.prosemirrorSync.lib.getSnapshot, { id: args.documentId });
+  const beforeContent =
+    prev && "content" in prev && typeof prev.content === "string" && prev.content
+      ? prev.content
+      : JSON.stringify({ type: "doc", content: [] });
+
+  const recent = await ctx.db
+    .query("fileEvents")
+    .withIndex("by_file", (q) => q.eq("fileId", args.fileId))
+    .order("desc")
+    .take(8);
+  const lastEdit = recent.find((e) => e.action === "edited");
+  const lastMeta = lastEdit ? asEditMeta(lastEdit.metadata) : null;
+  const lastActivity = lastMeta?.endedAt ?? lastEdit?._creationTime ?? 0;
+
+  if (lastEdit && lastMeta && now - lastActivity < EDIT_COALESCE_MS) {
+    const actorIds = lastMeta.actorIds.includes(args.actorId)
+      ? lastMeta.actorIds
+      : [...lastMeta.actorIds, args.actorId];
+    await ctx.db.patch("fileEvents", lastEdit._id, {
+      metadata: {
+        ...lastMeta,
+        afterText: args.afterText,
+        afterContent: clipEditContent(args.afterContent),
+        actorIds,
+        endedAt: now,
+        version: args.version ?? lastMeta.version,
+      } satisfies DocumentEditMeta,
+    });
+    return;
+  }
+
+  await logFileEvent(ctx, {
+    fileId: args.fileId,
+    actorId: args.actorId,
+    action: "edited",
+    metadata: {
+      beforeText: snapshotText(beforeContent),
+      afterText: args.afterText,
+      beforeContent: clipEditContent(beforeContent),
+      afterContent: clipEditContent(args.afterContent),
+      actorIds: [args.actorId],
+      endedAt: now,
+      version: args.version,
+    } satisfies DocumentEditMeta,
+  });
+}
+
+export { asEditMeta };
+
+/**
+ * Upserts a grant.
+ * By default write beats read (task auto-grants). Pass `exact` so the Access sheet can downgrade.
+ */
 export async function upsertFileGrant(
   ctx: MutationCtx,
   args: {
@@ -338,6 +450,8 @@ export async function upsertFileGrant(
     level: "read" | "write";
     grantedBy: Id<"users">;
     assignmentId?: Id<"assignments">;
+    /** Set the level exactly instead of merging write over read. */
+    exact?: boolean;
   },
 ) {
   if (args.userId === args.grantedBy) {
@@ -346,7 +460,11 @@ export async function upsertFileGrant(
   }
   const existing = await getFileGrant(ctx, args.fileId, args.userId);
   if (existing) {
-    const nextLevel = existing.level === "write" || args.level === "write" ? "write" : "read";
+    const nextLevel = args.exact
+      ? args.level
+      : existing.level === "write" || args.level === "write"
+        ? "write"
+        : "read";
     const patch: Partial<Doc<"fileGrants">> = {};
     if (nextLevel !== existing.level) patch.level = nextLevel;
     if (args.assignmentId && !existing.assignmentId) patch.assignmentId = args.assignmentId;

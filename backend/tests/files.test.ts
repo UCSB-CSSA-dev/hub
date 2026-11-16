@@ -170,12 +170,20 @@ describe("file spaces", () => {
     await expect(bob.as.mutation(api.files.revoke, { fileId, userId: carol.userId })).rejects.toThrow(/FORBIDDEN/);
     await alice.as.mutation(api.files.revoke, { fileId, userId: carol.userId });
 
+    // Access sheet can downgrade write → read.
+    await alice.as.mutation(api.files.grant, { fileId, userId: bob.userId, level: "read" });
+    expect((await alice.as.query(api.files.listAccess, { fileId }))?.grants).toEqual([
+      expect.objectContaining({ userId: bob.userId, level: "read" }),
+    ]);
+    await expect(bob.as.mutation(api.files.rename, { fileId, name: "again.txt" })).rejects.toThrow(/FORBIDDEN/);
+    await alice.as.mutation(api.files.grant, { fileId, userId: bob.userId, level: "write" });
+
     const access = await alice.as.query(api.files.listAccess, { fileId });
     expect(access?.grants.map((g) => g.userId)).toEqual([bob.userId]);
     expect(access?.canEdit).toBe(true);
 
     const history = await alice.as.query(api.files.history, { fileId });
-    expect(history?.map((e) => e.action)).toEqual(
+    expect(history?.events.map((e) => e.action)).toEqual(
       expect.arrayContaining(["created", "granted", "renamed", "revoked"]),
     );
   });

@@ -118,7 +118,7 @@ describe("core chat", () => {
     ).rejects.toThrow(/FORBIDDEN/);
     expect((await admin.as.query(api.channels.get, { channelId: org }))?.access.canAnnounce).toBe(true);
 
-    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true });
+    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true, duration: "1h" });
     const id = await lead.as.mutation(api.messages.send, { channelId: events, body: "周五开会", announcement: true });
     expect(await alice.as.query(api.notifications.unreadCount, {})).toBe(1);
     expect(await bob.as.query(api.notifications.unreadCount, {})).toBe(1);

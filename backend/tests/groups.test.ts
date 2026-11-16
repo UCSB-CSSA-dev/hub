@@ -74,7 +74,9 @@ describe("group chats", () => {
     expect(info.departments.flatMap((d) => d.leads.map((l) => l._id)).sort()).toEqual(
       [eventsLead.userId, pubLead.userId].sort(),
     );
-    expect(info.viewer.canManage).toBe(false);
+    // Proposer is co-owner with the approver after approval.
+    expect(info.viewer.canManage).toBe(true);
+    expect((await designer.as.query(api.groups.info, { channelId })).viewer.canManage).toBe(false);
 
     await pubLead.as.mutation(api.groups.addMembers, { channelId, userIds: [other.userId] });
     await expect(

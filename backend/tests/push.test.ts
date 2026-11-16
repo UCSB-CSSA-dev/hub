@@ -106,7 +106,7 @@ describe("push delivery", () => {
     expect(new Set(pushes[0].userIds)).toEqual(new Set([bob.userId]));
     expect(pushes[0].input).toMatchObject({ type: "chat", tag: messageId });
 
-    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true });
+    await bob.as.mutation(api.channels.setMuted, { channelId: events, muted: true, duration: "1h" });
     await alice.as.mutation(api.messages.send, { channelId: events, body: "muted" });
     expect(await scheduledPushes(t)).toHaveLength(1);
 
