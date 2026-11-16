@@ -59,6 +59,24 @@ export async function channelMemberRow(
     .unique();
 }
 
+/** Permanent mute, or a temporary mute that hasn't expired yet. */
+export function memberIsMuted(
+  row: Pick<Doc<"channelMembers">, "muted" | "mutedUntil"> | null | undefined,
+  now = Date.now(),
+) {
+  if (!row) return false;
+  if (row.mutedUntil !== undefined && row.mutedUntil > now) return true;
+  return row.muted === true;
+}
+
+/** Allowed temporary mute lengths for 全体 / department chats (ms). */
+export const TIMED_MUTE_MS = {
+  "30m": 30 * 60 * 1000,
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+} as const;
+export type TimedMuteKey = keyof typeof TIMED_MUTE_MS;
+
 /** Explicit members of a DM (every row), group or private 小飒 chat (rows with joinedAt). */
 export async function explicitMembers(ctx: QueryCtx, channel: Doc<"channels">) {
   const rows = await ctx.db
@@ -273,7 +291,13 @@ export async function channelAccess(
     canPost,
     canAnnounce: canPost && (channel.type === "org" || channel.type === "department") && leadsOwnChannel,
     canInteract: writable,
-    canManage: channel.type === "group" && writable && (leadsInvolved || viewer.isAdmin),
+    canManage:
+      channel.type === "group" &&
+      writable &&
+      (leadsInvolved ||
+        viewer.isAdmin ||
+        channel.createdBy === viewer.user._id ||
+        channel.approvedBy === viewer.user._id),
     canModerate: viewer.isAdmin,
     canSetRetention: canSetRetention && (channel.type !== "group" || writable),
     canApproveApps: writable && canApproveApps,

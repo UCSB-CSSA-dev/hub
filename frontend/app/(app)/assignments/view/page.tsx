@@ -30,6 +30,8 @@ import { Suspense, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MarkdownView } from "@/components/docs/markdown-view";
 import { TaskDocuments } from "@/components/docs/task-documents";
+import { FileAccessActions } from "@/components/files/file-access";
+import { FilePickerDialog } from "@/components/files/file-dialogs";
 import { FileTypeIcon } from "@/components/files/file-icon";
 import { FileViewer } from "@/components/files/file-viewer";
 import { UploadPanel } from "@/components/files/upload-panel";
@@ -204,7 +206,12 @@ function TaskDetail({ task, submissionId }: { task: Task; submissionId: Id<"assi
                 ) : null}
               </dl>
               {a.description ? <MarkdownView source={a.description} breaks people={task.people} className="text-sm" /> : null}
-              <FileList files={task.files} missing={task.missing} />
+              <FileList
+                files={task.files}
+                missing={task.missing}
+                assignmentId={a._id}
+                canAttach={access.review || Boolean(task.mySubmission)}
+              />
             </CardContent>
           </Card>
 
@@ -318,44 +325,102 @@ function ManageMenu({ task }: { task: Task }) {
   );
 }
 
-function FileList({ files, missing }: { files: TaskFile[]; missing: number }) {
+function FileList({
+  files,
+  missing,
+  assignmentId,
+  canAttach = false,
+}: {
+  files: TaskFile[];
+  missing: number;
+  assignmentId?: Id<"assignments">;
+  canAttach?: boolean;
+}) {
   const t = useTranslations("tasks");
+  const tFiles = useTranslations("files");
   const tDocs = useTranslations("docs");
+  const showError = useErrorToast();
+  const linkToTask = useMutation(api.files.linkToTask);
   const [viewing, setViewing] = useState<FileSource | null>(null);
-  if (files.length === 0 && missing === 0) return null;
+  const [viewingId, setViewingId] = useState<Id<"files"> | null>(null);
+  const [picking, setPicking] = useState(false);
+  if (files.length === 0 && missing === 0 && !canAttach) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <FileViewer file={viewing} onClose={() => setViewing(null)} />
+      <FileViewer
+        file={viewing}
+        onClose={() => {
+          setViewing(null);
+          setViewingId(null);
+        }}
+        headerActions={viewingId ? <FileAccessActions fileId={viewingId} /> : null}
+      />
       {files.map((f) => {
+        const accessLabel =
+          f.myAccess === "owner"
+            ? tFiles("accessOwner")
+            : f.myAccess === "write"
+              ? tFiles("accessWrite")
+              : f.myAccess === "read"
+                ? tFiles("accessRead")
+                : null;
         const className =
           "flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm hover:bg-secondary";
         const body = (
           <>
             <FileTypeIcon contentType={f.contentType} name={f.name} document={Boolean(f.documentId)} className="size-4" />
             <span className="min-w-0 flex-1 truncate">{f.name}</span>
+            {accessLabel ? <span className="shrink-0 text-xs text-muted-foreground">{accessLabel}</span> : null}
             <span className="text-xs text-muted-foreground">{f.documentId ? tDocs("document") : formatBytes(f.size)}</span>
           </>
         );
-        return f.documentId ? (
-          <Link key={f._id} href={docHref(f.documentId)} className={className}>
-            {body}
-          </Link>
-        ) : !f.drive && f.url ? (
-          <button
-            key={f._id}
-            type="button"
-            onClick={() => setViewing({ url: f.url!, name: f.name, contentType: f.contentType, size: f.size })}
-            className={cn(className, "text-left")}
-          >
-            {body}
-          </button>
-        ) : (
-          <a key={f._id} href={f.openUrl ?? undefined} target="_blank" rel="noopener noreferrer" className={className}>
-            {body}
-          </a>
+        return (
+          <div key={f._id} className="flex items-center gap-1">
+            {f.documentId ? (
+              <Link href={docHref(f.documentId)} className={cn(className, "min-w-0 flex-1")}>
+                {body}
+              </Link>
+            ) : !f.drive && f.url ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingId(f._id);
+                  setViewing({ url: f.url!, name: f.name, contentType: f.contentType, size: f.size });
+                }}
+                className={cn(className, "min-w-0 flex-1 text-left")}
+              >
+                {body}
+              </button>
+            ) : (
+              <a href={f.openUrl ?? undefined} target="_blank" rel="noopener noreferrer" className={cn(className, "min-w-0 flex-1")}>
+                {body}
+              </a>
+            )}
+            <FileAccessActions fileId={f._id} />
+          </div>
         );
       })}
       {missing > 0 ? <p className="text-xs text-muted-foreground">{t("filesMissing", { count: missing })}</p> : null}
+      {canAttach && assignmentId ? (
+        <Button type="button" size="sm" variant="outline" className="self-start" onClick={() => setPicking(true)}>
+          {t("linkExisting")}
+        </Button>
+      ) : null}
+      {assignmentId ? (
+        <FilePickerDialog
+          open={picking}
+          max={LIMITS.taskFiles - files.length}
+          onClose={() => setPicking(false)}
+          onPick={async (picked) => {
+            try {
+              for (const file of picked) await linkToTask({ fileId: file._id, assignmentId });
+              toast.success(t("filesLinked"));
+            } catch (error) {
+              showError(error);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

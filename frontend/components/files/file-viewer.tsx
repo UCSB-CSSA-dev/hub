@@ -3,7 +3,7 @@
 import { DownloadIcon, ExternalLinkIcon, HardDriveIcon, LoaderIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { downloadFile, isCacheable, loadFile, MAX_CACHED_BYTES, type FileSource } from "@/lib/file-cache";
@@ -16,10 +16,18 @@ const PdfView = dynamic(() => import("./pdf-view").then((m) => m.PdfView), { ssr
 const TEXT_PREVIEW_BYTES = 1_000_000;
 
 /** Opens a stored file in a dialog, reading it from this device after the first time. */
-export function FileViewer({ file, onClose }: { file: FileSource | null; onClose: () => void }) {
+export function FileViewer({
+  file,
+  onClose,
+  headerActions,
+}: {
+  file: FileSource | null;
+  onClose: () => void;
+  headerActions?: ReactNode;
+}) {
   return (
     <Dialog open={file !== null} onOpenChange={(open) => !open && onClose()}>
-      {file ? <ViewerContent key={file.url} file={file} /> : null}
+      {file ? <ViewerContent key={file.url} file={file} headerActions={headerActions} /> : null}
     </Dialog>
   );
 }
@@ -46,7 +54,7 @@ function useFileBlob({ url, name, contentType, size }: FileSource): Loaded {
   return loaded;
 }
 
-function ViewerContent({ file }: { file: FileSource }) {
+function ViewerContent({ file, headerActions }: { file: FileSource; headerActions?: ReactNode }) {
   const t = useTranslations("files");
   const showError = useErrorToast();
   const loaded = useFileBlob(file);
@@ -91,17 +99,22 @@ function ViewerContent({ file }: { file: FileSource }) {
   return (
     <DialogContent className="flex h-[90dvh] flex-col gap-3 sm:max-w-4xl">
       <DialogHeader className="min-w-0 pr-8">
-        <DialogTitle className="truncate leading-snug">{file.name}</DialogTitle>
-        <DialogDescription className="flex items-center gap-1.5">
-          {formatBytes(file.size)}
-          {kept ? (
-            <>
-              <span>·</span>
-              <HardDriveIcon className="size-3.5" />
-              {t("keptOnDevice")}
-            </>
-          ) : null}
-        </DialogDescription>
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="truncate leading-snug">{file.name}</DialogTitle>
+            <DialogDescription className="flex items-center gap-1.5">
+              {formatBytes(file.size)}
+              {kept ? (
+                <>
+                  <span>·</span>
+                  <HardDriveIcon className="size-3.5" />
+                  {t("keptOnDevice")}
+                </>
+              ) : null}
+            </DialogDescription>
+          </div>
+          {headerActions ? <div className="flex shrink-0 items-center gap-0.5">{headerActions}</div> : null}
+        </div>
       </DialogHeader>
       <div className="flex min-h-0 flex-1 overflow-auto rounded-md bg-secondary/40">{body}</div>
       <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">

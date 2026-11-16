@@ -6,7 +6,7 @@ import { uploadTarget, type SaveResult } from "./files";
 import { appsScriptConfigured, callAppsScript } from "./lib/appsScript";
 import { LIMITS, type ErrorCode } from "./lib/constants";
 import { appError } from "./lib/errors";
-import { cleanName, ensureTaskFolder, isBlockedFile, loadSpace, requireFolder, spaceKey, uniqueName } from "./lib/files";
+import { cleanName, ensureTaskFolder, isBlockedFile, loadSpace, logFileEvent, requireFolder, spaceKey, uniqueName } from "./lib/files";
 import { requireApproved } from "./lib/permissions";
 
 // Files over LIMITS.fileBytes, or uploaded when the space is out of quota, go to the CSSA Google Drive
@@ -153,6 +153,12 @@ export const record = internalMutation({
         departmentId: target.departmentId,
         folderId,
         uploadedBy: viewer.user._id,
+      });
+      await logFileEvent(ctx, {
+        fileId,
+        actorId: viewer.user._id,
+        action: "created",
+        metadata: { drive: true, assignmentId: target.assignment?._id },
       });
       return { ok: true, fileId };
     } catch (error) {
